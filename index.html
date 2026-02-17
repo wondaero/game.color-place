@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Color Place</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <style>
 :root {
   --cell: min(64px, calc((100vw - 60px) / 5.8));
@@ -14,7 +15,7 @@
 * { margin: 0; padding: 0; box-sizing: border-box; }
 html, body { overflow-x: hidden; }
 body {
-  font-family: -apple-system, 'Segoe UI', sans-serif;
+  font-family: 'Pretendard', -apple-system, 'Segoe UI', sans-serif;
   background: #1a1a2e;
   color: #eee;
   display: flex;
@@ -46,7 +47,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   width: 100%;
   justify-content: center;
 }
-#top-bar .val { color: #fff; font-weight: bold; font-size: 20px; }
+#top-bar .val { color: #fff; font-weight: bold; font-size: 20px; margin-left: 10px; }
 #combo-display { color: #e94560; transition: opacity 0.3s; }
 #combo-display.hidden { opacity: 0; }
 #level-display { color: #FBBC04; font-size: 12px; }
@@ -71,12 +72,39 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 .queue-slot.current { border-color: #e94560; }
 .queue-slot .label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
 .queue-slot .tile-preview {
-  width: 32px; height: 32px; border-radius: 50%;
+  width: 36px; height: 36px; border-radius: 50%;
+  overflow: hidden;
   transition: background 0.3s;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
-.queue-slot .tile-info { font-size: 11px; color: #999; }
+.queue-slot .tile-preview .tile-num {
+  position: relative;
+  z-index: 2;
+  font-size: 14px;
+  font-weight: bold;
+  text-shadow: none;
+  line-height: 1;
+}
+.queue-slot .tile-preview .tile-line {
+  position: absolute;
+  background: rgba(255,255,255,0.9);
+  z-index: 1;
+}
+.queue-slot .tile-preview .tile-line.horizontal {
+  width: 100%; height: 40%;
+  top: 50%; left: 0;
+  transform: translateY(-50%);
+}
+.queue-slot .tile-preview .tile-line.vertical {
+  width: 40%; height: 100%;
+  left: 50%; top: 0;
+  transform: translateX(-50%);
+}
 
-/* Mission */
+/* Mission - fixed height to prevent board shift (max: vertical 5 = 5*12 + 4*2 = 68px) */
 #mission-area {
   display: flex;
   align-items: center;
@@ -85,7 +113,8 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   background: #16213e;
   border-radius: 8px;
   border: 1px solid #0f3460;
-  min-height: 40px;
+  min-height: 80px;
+  height: 80px;
 }
 #mission-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
 #mission-grid {
@@ -180,7 +209,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   box-shadow: inset 0 0 0 2px rgba(255,255,255,0.2);
 }
 .cell.change-target {
-  box-shadow: inset 0 0 0 2px #e94560;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.35);
 }
 
 /* Tiles */
@@ -332,17 +361,14 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
     <div class="queue-slot current" id="q-current">
       <div class="label">Current</div>
       <div class="tile-preview" id="qp-current"></div>
-      <div class="tile-info" id="qi-current"></div>
     </div>
     <div class="queue-slot" id="q-next">
       <div class="label">Next</div>
       <div class="tile-preview" id="qp-next"></div>
-      <div class="tile-info" id="qi-next"></div>
     </div>
     <div class="queue-slot" id="q-nextnext">
       <div class="label">Next+</div>
       <div class="tile-preview" id="qp-nextnext"></div>
-      <div class="tile-info" id="qi-nextnext"></div>
     </div>
   </div>
 
@@ -379,6 +405,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 // ============================================================
 const ALL_COLORS = ['red','orange','yellow','green','blue','indigo','violet'];
 const COLOR_KR = {red:'빨',orange:'주',yellow:'노',green:'초',blue:'파',indigo:'남',violet:'보'};
+const COLOR_HEX = {red:'#EA4335',orange:'#FF6D01',yellow:'#FBBC04',green:'#34A853',blue:'#4285F4',indigo:'#4B0082',violet:'#9B59B6'};
 
 const LEVELS = [
   { minScore: 0,    colors: 4, label: '' },
@@ -501,6 +528,13 @@ function hasTilesOnBoard() {
     for (let c = 0; c < BOARD_SIZE; c++)
       if (board[r][c] && !board[r][c].isVoid) return true;
   return false;
+}
+
+function isBoardEmpty() {
+  for (let r = 0; r < BOARD_SIZE; r++)
+    for (let c = 0; c < BOARD_SIZE; c++)
+      if (board[r][c]) return false;
+  return true;
 }
 
 // ============================================================
@@ -675,13 +709,21 @@ function renderQueue() {
   for (let i = 0; i < 3; i++) {
     const t = queue[i];
     const preview = document.getElementById(`qp-${ids[i]}`);
-    const info = document.getElementById(`qi-${ids[i]}`);
+    preview.innerHTML = '';
     if (t) {
       preview.className = `tile-preview color-${t.color}`;
-      info.textContent = `${t.dir === 'row' ? '가로' : '세로'} ${t.num}`;
+      // Line (horizontal or vertical)
+      const line = document.createElement('div');
+      line.className = `tile-line ${t.dir === 'row' ? 'horizontal' : 'vertical'}`;
+      preview.appendChild(line);
+      // Number
+      const num = document.createElement('div');
+      num.className = 'tile-num';
+      num.textContent = t.num;
+      num.style.color = COLOR_HEX[t.color];
+      preview.appendChild(num);
     } else {
       preview.className = 'tile-preview';
-      info.textContent = '';
     }
   }
 }
@@ -981,6 +1023,12 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
     for (const key of cellsToRemove) {
       const [rr, cc] = key.split(',').map(Number);
       board[rr][cc] = null;
+    }
+
+    // Board clear bonus
+    if (isBoardEmpty()) {
+      score += 100;
+      showPopup('CLEAR! +100', 'mission-popup');
     }
 
     // Animate cracked voids
