@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Color Place</title>
+<style>
+:root {
+  --cell: min(64px, calc((100vw - 60px) / 5.8));
+  --tile: calc(var(--cell) * 0.75);
+  --gap: 4px;
+  --board-pad: 8px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { overflow-x: hidden; }
+body {
+  font-family: -apple-system, 'Segoe UI', sans-serif;
+  background: #1a1a2e;
+  color: #eee;
+  display: flex;
+  justify-content: center;
+  min-height: 100dvh;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+#app {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 8px;
+  width: 100%;
+  max-width: 420px;
+}
+h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
+
+/* Top bar */
+#top-bar {
+  display: flex;
+  gap: 20px;
+  align-items: center;
+  font-size: 15px;
+  color: #aaa;
+  width: 100%;
+  justify-content: center;
+}
+#top-bar .val { color: #fff; font-weight: bold; font-size: 20px; }
+#combo-display { color: #e94560; transition: opacity 0.3s; }
+#combo-display.hidden { opacity: 0; }
+#level-display { color: #FBBC04; font-size: 12px; }
+
+/* Queue */
+#queue-area {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.queue-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  background: #16213e;
+  border-radius: 10px;
+  border: 2px solid #0f3460;
+  min-width: 68px;
+}
+.queue-slot.current { border-color: #e94560; }
+.queue-slot .label { font-size: 9px; color: #555; text-transform: uppercase; letter-spacing: 1px; }
+.queue-slot .tile-preview {
+  width: 32px; height: 32px; border-radius: 50%;
+  transition: background 0.3s;
+}
+.queue-slot .tile-info { font-size: 11px; color: #999; }
+
+/* Mission */
+#mission-area {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  background: #16213e;
+  border-radius: 8px;
+  border: 1px solid #0f3460;
+  min-height: 40px;
+}
+#mission-label { font-size: 10px; color: #666; text-transform: uppercase; letter-spacing: 1px; }
+#mission-grid {
+  display: inline-grid;
+  gap: 2px;
+}
+.mission-dot {
+  width: 12px; height: 12px; border-radius: 50%;
+  background: #888;
+}
+.mission-dot.empty {
+  background: transparent;
+}
+#mission-bonus { color: #FBBC04; font-size: 12px; font-weight: bold; }
+
+/* Status - fixed height */
+#status-area {
+  min-height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+}
+#status {
+  font-size: 13px;
+  color: #e94560;
+  text-align: center;
+  padding: 3px 14px;
+  background: rgba(233,69,96,0.15);
+  border-radius: 6px;
+  transition: opacity 0.2s;
+}
+#status.hidden { opacity: 0; pointer-events: none; }
+
+/* Board */
+#board-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+#col-labels {
+  display: grid;
+  grid-template-columns: repeat(5, var(--cell));
+  gap: var(--gap);
+  padding-left: 22px;
+  padding-bottom: 3px;
+}
+#col-labels .lbl { text-align: center; font-size: 11px; color: #444; }
+#board-wrapper { display: flex; }
+#row-labels {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  padding-right: 4px;
+}
+#row-labels .lbl {
+  height: var(--cell);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: #444;
+  width: 18px;
+}
+#board {
+  display: grid;
+  grid-template-columns: repeat(5, var(--cell));
+  grid-template-rows: repeat(5, var(--cell));
+  gap: var(--gap);
+  background: #16213e;
+  padding: var(--board-pad);
+  border-radius: 12px;
+  border: 2px solid #0f3460;
+}
+
+/* Cells */
+.cell {
+  width: var(--cell);
+  height: var(--cell);
+  background: #0f3460;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s, box-shadow 0.15s;
+  position: relative;
+}
+.cell:active { transform: scale(0.95); }
+.cell.highlight {
+  background: #1a4a7a;
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.2);
+}
+.cell.change-target {
+  box-shadow: inset 0 0 0 2px #e94560;
+}
+
+/* Tiles */
+.cell .tile {
+  width: var(--tile);
+  height: var(--tile);
+  border-radius: 50%;
+}
+.cell .tile.pop { animation: popAnim 0.4s ease-out forwards; }
+.cell .tile.place { animation: placeAnim 0.25s ease-out; }
+.cell .tile.color-swap { animation: swapAnim 0.5s ease-out; }
+
+/* Void tile: half color, half gray */
+.cell .tile.void-tile {
+  border-radius: 50%;
+  position: relative;
+  overflow: hidden;
+}
+.cell .tile.void-tile::after {
+  content: '';
+  position: absolute;
+  top: 0; right: 0;
+  width: 50%; height: 100%;
+  background: #555;
+  border-radius: 0 999px 999px 0;
+}
+.cell .tile.void-crack {
+  animation: crackAnim 0.5s ease-out forwards;
+}
+@keyframes crackAnim {
+  0% { transform: scale(1); filter: brightness(1); }
+  30% { transform: scale(1.1); filter: brightness(2); }
+  60% { transform: scale(1.05); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes popAnim {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.3); opacity: 0.5; }
+  100% { transform: scale(0); opacity: 0; }
+}
+@keyframes placeAnim {
+  0% { transform: scale(0); }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+@keyframes swapAnim {
+  0% { transform: scale(1); filter: brightness(2); }
+  50% { transform: scale(1.2); filter: brightness(2); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+/* Colors - Rainbow order */
+.color-red { background: #EA4335; }
+.color-orange { background: #FF6D01; }
+.color-yellow { background: #FBBC04; }
+.color-green { background: #34A853; }
+.color-blue { background: #4285F4; }
+.color-indigo { background: #4B0082; }
+.color-violet { background: #9B59B6; }
+
+/* Game Over */
+#game-over {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 100;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+}
+#game-over.active { display: flex; }
+#game-over h2 { font-size: 32px; color: #e94560; }
+#game-over p { font-size: 20px; }
+#game-over .sub { font-size: 14px; color: #888; }
+#game-over button {
+  padding: 14px 36px;
+  font-size: 18px;
+  border: none;
+  border-radius: 10px;
+  background: #e94560;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 8px;
+}
+#game-over button:active { background: #c73650; }
+
+/* Popups */
+.combo-popup {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%,-50%) scale(0);
+  font-size: 44px;
+  font-weight: bold;
+  color: #e94560;
+  text-shadow: 0 0 20px rgba(233,69,96,0.6);
+  pointer-events: none;
+  z-index: 50;
+  animation: comboAnim 0.8s ease-out forwards;
+}
+@keyframes comboAnim {
+  0% { transform: translate(-50%,-50%) scale(0); opacity:1; }
+  30% { transform: translate(-50%,-50%) scale(1.2); opacity:1; }
+  100% { transform: translate(-50%,-70%) scale(0.8); opacity:0; }
+}
+.mission-popup {
+  position: fixed;
+  top: 40%; left: 50%;
+  transform: translate(-50%,-50%) scale(0);
+  font-size: 24px;
+  font-weight: bold;
+  color: #FBBC04;
+  text-shadow: 0 0 15px rgba(251,188,4,0.5);
+  pointer-events: none;
+  z-index: 50;
+  animation: missionAnim 1s ease-out forwards;
+}
+@keyframes missionAnim {
+  0% { transform: translate(-50%,-50%) scale(0); opacity:1; }
+  30% { transform: translate(-50%,-50%) scale(1.1); opacity:1; }
+  100% { transform: translate(-50%,-70%) scale(0.9); opacity:0; }
+}
+.level-popup {
+  position: fixed;
+  top: 45%; left: 50%;
+  transform: translate(-50%,-50%) scale(0);
+  font-size: 20px;
+  font-weight: bold;
+  color: #4285F4;
+  text-shadow: 0 0 15px rgba(66,133,244,0.5);
+  pointer-events: none;
+  z-index: 50;
+  animation: missionAnim 1.2s ease-out forwards;
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <h1>Color Place</h1>
+  <div id="top-bar">
+    <div>SCORE <span class="val" id="score">0</span></div>
+    <div id="combo-display" class="hidden">COMBO <span class="val" id="combo">0</span></div>
+  </div>
+  <div id="level-display"></div>
+
+  <div id="queue-area">
+    <div class="queue-slot current" id="q-current">
+      <div class="label">Current</div>
+      <div class="tile-preview" id="qp-current"></div>
+      <div class="tile-info" id="qi-current"></div>
+    </div>
+    <div class="queue-slot" id="q-next">
+      <div class="label">Next</div>
+      <div class="tile-preview" id="qp-next"></div>
+      <div class="tile-info" id="qi-next"></div>
+    </div>
+    <div class="queue-slot" id="q-nextnext">
+      <div class="label">Next+</div>
+      <div class="tile-preview" id="qp-nextnext"></div>
+      <div class="tile-info" id="qi-nextnext"></div>
+    </div>
+  </div>
+
+  <div id="mission-area">
+    <span id="mission-label">MISSION</span>
+    <div id="mission-grid"></div>
+    <span id="mission-bonus"></span>
+  </div>
+
+  <div id="status-area">
+    <div id="status" class="hidden">-</div>
+  </div>
+
+  <div id="board-section">
+    <div id="col-labels"></div>
+    <div id="board-wrapper">
+      <div id="row-labels"></div>
+      <div id="board"></div>
+    </div>
+  </div>
+</div>
+
+<div id="game-over">
+  <h2>GAME OVER</h2>
+  <p>최종 점수: <span id="final-score">0</span></p>
+  <p class="sub" id="final-combo"></p>
+  <p class="sub" id="final-level"></p>
+  <button onclick="initGame()">다시 시작</button>
+</div>
+
+<script>
+// ============================================================
+// COLOR LEVELS
+// ============================================================
+const ALL_COLORS = ['red','orange','yellow','green','blue','indigo','violet'];
+const COLOR_KR = {red:'빨',orange:'주',yellow:'노',green:'초',blue:'파',indigo:'남',violet:'보'};
+
+const LEVELS = [
+  { minScore: 0,    colors: 4, label: '' },
+  { minScore: 500,  colors: 5, label: '+파 해금!' },
+  { minScore: 1000, colors: 6, label: '+남 해금!' },
+  { minScore: 1500, colors: 6, label: '자동 색변경!' , autoChange: true },
+  { minScore: 2000, colors: 7, label: '+보 해금!' , autoChange: true },
+  { minScore: 2500, colors: 7, label: '무효블록 등장!' , autoChange: true, voidBlocks: true },
+];
+
+function getLevel() {
+  let lv = LEVELS[0];
+  for (const l of LEVELS) {
+    if (score >= l.minScore) lv = l;
+  }
+  return lv;
+}
+
+function getActiveColors() {
+  return ALL_COLORS.slice(0, getLevel().colors);
+}
+
+// ============================================================
+// MISSION SHAPES
+// ============================================================
+const MISSION_SHAPES = [
+  { id:'h3', name:'ㅡ3', cells:[[0,0],[0,1],[0,2]], bonus:30 },
+  { id:'h4', name:'ㅡ4', cells:[[0,0],[0,1],[0,2],[0,3]], bonus:50 },
+  { id:'h5', name:'ㅡ5', cells:[[0,0],[0,1],[0,2],[0,3],[0,4]], bonus:80 },
+  { id:'v3', name:'ㅣ3', cells:[[0,0],[1,0],[2,0]], bonus:30 },
+  { id:'v4', name:'ㅣ4', cells:[[0,0],[1,0],[2,0],[3,0]], bonus:50 },
+  { id:'v5', name:'ㅣ5', cells:[[0,0],[1,0],[2,0],[3,0],[4,0]], bonus:80 },
+  { id:'giyeok', name:'ㄱ', cells:[[0,0],[0,1],[1,1]], bonus:40 },
+  { id:'nieun', name:'ㄴ', cells:[[0,0],[1,0],[1,1]], bonus:40 },
+  { id:'L', name:'L', cells:[[0,0],[1,0],[2,0],[2,1]], bonus:50 },
+  { id:'T', name:'T', cells:[[0,0],[0,1],[0,2],[1,1]], bonus:50 },
+  { id:'sq', name:'ㅁ', cells:[[0,0],[0,1],[1,0],[1,1]], bonus:60 },
+];
+
+// ============================================================
+// STATE
+// ============================================================
+const BOARD_SIZE = 5;
+let board = [];       // null | { color, isVoid }
+let queue = [];
+let score = 0;
+let combo = 0;
+let maxCombo = 0;
+let colorChangeMode = false;
+let gameActive = false;
+let inputLocked = false;
+let currentMission = null;
+let turnCount = 0;
+let missionTurnCounter = 0;
+let voidTurnCounter = 0;
+let prevLevel = null;
+let voidSpawnedAt2500 = false;
+
+// ============================================================
+// UTILITY
+// ============================================================
+function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+// ============================================================
+// BOARD
+// ============================================================
+function initBoard() {
+  board = [];
+  for (let r = 0; r < BOARD_SIZE; r++) board.push(new Array(BOARD_SIZE).fill(null));
+}
+
+function cellOccupied(r, c) { return board[r][c] !== null; }
+function cellPlayable(r, c) { return board[r][c] === null; }
+
+function getAvailableLines() {
+  const lines = [];
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    let empty = 0;
+    for (let c = 0; c < BOARD_SIZE; c++) if (!cellOccupied(r, c)) empty++;
+    if (empty > 0) lines.push({ dir: 'row', num: r + 1 });
+  }
+  for (let c = 0; c < BOARD_SIZE; c++) {
+    let empty = 0;
+    for (let r = 0; r < BOARD_SIZE; r++) if (!cellOccupied(r, c)) empty++;
+    if (empty > 0) lines.push({ dir: 'col', num: c + 1 });
+  }
+  return lines;
+}
+
+function generateTile(useBoard) {
+  const colors = getActiveColors();
+  let dir, num;
+  if (useBoard) {
+    const lines = getAvailableLines();
+    if (lines.length === 0) return null;
+    const pick = rand(lines);
+    dir = pick.dir; num = pick.num;
+  } else {
+    dir = rand(['row', 'col']);
+    num = randInt(1, BOARD_SIZE);
+  }
+  return { color: rand(colors), dir, num };
+}
+
+function getValidCells(tile) {
+  const cells = [];
+  if (tile.dir === 'row') {
+    const r = tile.num - 1;
+    for (let c = 0; c < BOARD_SIZE; c++) if (cellPlayable(r, c)) cells.push({ r, c });
+  } else {
+    const c = tile.num - 1;
+    for (let r = 0; r < BOARD_SIZE; r++) if (cellPlayable(r, c)) cells.push({ r, c });
+  }
+  return cells;
+}
+
+function hasTilesOnBoard() {
+  for (let r = 0; r < BOARD_SIZE; r++)
+    for (let c = 0; c < BOARD_SIZE; c++)
+      if (board[r][c] && !board[r][c].isVoid) return true;
+  return false;
+}
+
+// ============================================================
+// VOID BLOCKS
+// ============================================================
+function spawnVoidBlock() {
+  const emptyCells = [];
+  for (let r = 0; r < BOARD_SIZE; r++)
+    for (let c = 0; c < BOARD_SIZE; c++)
+      if (!board[r][c]) emptyCells.push({ r, c });
+  if (emptyCells.length === 0) return;
+  const pos = rand(emptyCells);
+  const colors = getActiveColors();
+  board[pos.r][pos.c] = { color: rand(colors), isVoid: true };
+}
+
+// Check void blocks adjacent to cleared cells, crack them
+function crackAdjacentVoids(clearedCells) {
+  const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+  const cracked = [];
+  const clearedSet = new Set(clearedCells.map(c => `${c.r},${c.c}`));
+
+  for (const { r, c } of clearedCells) {
+    for (const [dr, dc] of dirs) {
+      const nr = r + dr, nc = c + dc;
+      if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
+      const cell = board[nr][nc];
+      if (cell && cell.isVoid && !clearedSet.has(`${nr},${nc}`)) {
+        cracked.push({ r: nr, c: nc });
+      }
+    }
+  }
+
+  // Convert void to valid
+  for (const { r, c } of cracked) {
+    board[r][c] = { color: board[r][c].color, isVoid: false };
+  }
+  return cracked;
+}
+
+// ============================================================
+// MATCH DETECTION
+// ============================================================
+function findMatches() {
+  const visited = Array.from({ length: BOARD_SIZE }, () => new Array(BOARD_SIZE).fill(false));
+  const groups = [];
+  const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
+
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (visited[r][c] || !board[r][c] || board[r][c].isVoid) continue;
+      const color = board[r][c].color;
+      const group = [];
+      const stack = [{ r, c }];
+      visited[r][c] = true;
+      while (stack.length) {
+        const cur = stack.pop();
+        group.push(cur);
+        for (const [dr, dc] of dirs) {
+          const nr = cur.r + dr, nc = cur.c + dc;
+          if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE
+              && !visited[nr][nc] && board[nr][nc] && !board[nr][nc].isVoid
+              && board[nr][nc].color === color) {
+            visited[nr][nc] = true;
+            stack.push({ r: nr, c: nc });
+          }
+        }
+      }
+      if (group.length >= 3) groups.push({ color, cells: group });
+    }
+  }
+  return groups;
+}
+
+function collectCells(matches) {
+  const set = new Set();
+  for (const g of matches) for (const c of g.cells) set.add(`${c.r},${c.c}`);
+  return set;
+}
+
+// ============================================================
+// MISSION
+// ============================================================
+function generateMission() {
+  currentMission = { ...rand(MISSION_SHAPES) };
+  renderMission();
+}
+
+function renderMission() {
+  const grid = document.getElementById('mission-grid');
+  const bonus = document.getElementById('mission-bonus');
+  grid.innerHTML = '';
+  if (!currentMission) { bonus.textContent = ''; return; }
+
+  const cells = currentMission.cells;
+  const maxR = Math.max(...cells.map(c => c[0])) + 1;
+  const maxC = Math.max(...cells.map(c => c[1])) + 1;
+  grid.style.gridTemplateColumns = `repeat(${maxC}, 12px)`;
+  grid.style.gridTemplateRows = `repeat(${maxR}, 12px)`;
+
+  const cellSet = new Set(cells.map(c => `${c[0]},${c[1]}`));
+  for (let r = 0; r < maxR; r++) {
+    for (let c = 0; c < maxC; c++) {
+      const dot = document.createElement('div');
+      dot.className = cellSet.has(`${r},${c}`) ? 'mission-dot' : 'mission-dot empty';
+      grid.appendChild(dot);
+    }
+  }
+  bonus.textContent = `+${currentMission.bonus}`;
+}
+
+function getRotations(cells) {
+  const results = [];
+  let cur = cells.map(c => [...c]);
+  for (let i = 0; i < 4; i++) {
+    const minR = Math.min(...cur.map(c => c[0]));
+    const minC = Math.min(...cur.map(c => c[1]));
+    results.push(cur.map(c => [c[0] - minR, c[1] - minC]));
+    cur = cur.map(([r, c]) => [c, -r]);
+  }
+  return results;
+}
+
+function checkMissionComplete(clearedCells) {
+  if (!currentMission) return false;
+  const rotations = getRotations(currentMission.cells);
+  const clearedSet = new Set(clearedCells.map(c => `${c.r},${c.c}`));
+  for (const shape of rotations) {
+    for (const anchor of clearedCells) {
+      const dr = anchor.r - shape[0][0];
+      const dc = anchor.c - shape[0][1];
+      const translated = shape.map(([r, c]) => [r + dr, c + dc]);
+      if (translated.every(([r, c]) => clearedSet.has(`${r},${c}`))) return true;
+    }
+  }
+  return false;
+}
+
+// ============================================================
+// RENDERING
+// ============================================================
+function renderBoard() {
+  const boardEl = document.getElementById('board');
+  boardEl.innerHTML = '';
+  const currentTile = queue[0];
+  const validCells = (currentTile && !colorChangeMode && !inputLocked) ? getValidCells(currentTile) : [];
+
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      const cell = document.createElement('div');
+      cell.className = 'cell';
+
+      const data = board[r][c];
+      if (data) {
+        const tile = document.createElement('div');
+        tile.className = `tile color-${data.color}`;
+        if (data.isVoid) tile.classList.add('void-tile');
+        cell.appendChild(tile);
+        if (colorChangeMode && !data.isVoid) cell.classList.add('change-target');
+      }
+
+      if (validCells.some(v => v.r === r && v.c === c)) cell.classList.add('highlight');
+
+      cell.addEventListener('click', () => onCellClick(r, c));
+      boardEl.appendChild(cell);
+    }
+  }
+}
+
+function renderQueue() {
+  const ids = ['current', 'next', 'nextnext'];
+  for (let i = 0; i < 3; i++) {
+    const t = queue[i];
+    const preview = document.getElementById(`qp-${ids[i]}`);
+    const info = document.getElementById(`qi-${ids[i]}`);
+    if (t) {
+      preview.className = `tile-preview color-${t.color}`;
+      info.textContent = `${t.dir === 'row' ? '가로' : '세로'} ${t.num}`;
+    } else {
+      preview.className = 'tile-preview';
+      info.textContent = '';
+    }
+  }
+}
+
+function renderLabels() {
+  const rowL = document.getElementById('row-labels');
+  const colL = document.getElementById('col-labels');
+  rowL.innerHTML = ''; colL.innerHTML = '';
+  for (let i = 1; i <= BOARD_SIZE; i++) {
+    let d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; rowL.appendChild(d);
+    d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; colL.appendChild(d);
+  }
+}
+
+function setStatus(text) {
+  const el = document.getElementById('status');
+  if (text) { el.textContent = text; el.classList.remove('hidden'); }
+  else { el.classList.add('hidden'); }
+}
+
+function updateComboDisplay() {
+  const el = document.getElementById('combo-display');
+  document.getElementById('combo').textContent = combo;
+  if (combo >= 2) el.classList.remove('hidden');
+  else el.classList.add('hidden');
+}
+
+function updateLevelDisplay() {
+  const lv = getLevel();
+  const colors = getActiveColors();
+  const names = colors.map(c => COLOR_KR[c]).join(' ');
+  let extra = '';
+  if (lv.autoChange) extra += ' | 자동변경';
+  if (lv.voidBlocks) extra += ' | 무효블록';
+  document.getElementById('level-display').textContent = `[ ${names}${extra} ]`;
+}
+
+function renderAll() {
+  renderBoard();
+  renderQueue();
+  document.getElementById('score').textContent = score;
+  updateComboDisplay();
+  updateLevelDisplay();
+}
+
+function showPopup(text, cls) {
+  const el = document.createElement('div');
+  el.className = cls;
+  el.textContent = text;
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 1200);
+}
+
+// ============================================================
+// LEVEL TRANSITION
+// ============================================================
+function checkLevelUp() {
+  const newLevel = getLevel();
+  if (prevLevel && newLevel.minScore > prevLevel.minScore) {
+    if (newLevel.label) showPopup(newLevel.label, 'level-popup');
+
+    // 2500 first time: spawn void immediately
+    if (newLevel.voidBlocks && !voidSpawnedAt2500) {
+      voidSpawnedAt2500 = true;
+      voidTurnCounter = 0;
+      spawnVoidBlock();
+    }
+  }
+  prevLevel = newLevel;
+}
+
+// ============================================================
+// GAME LOGIC
+// ============================================================
+function onCellClick(r, c) {
+  if (!gameActive || inputLocked) return;
+
+  // --- COLOR CHANGE ---
+  if (colorChangeMode) {
+    if (!hasTilesOnBoard()) {
+      // No valid tiles: spawn random
+      if (!board[r][c]) {
+        board[r][c] = { color: rand(getActiveColors()), isVoid: false };
+        endColorChange(r, c);
+      }
+      return;
+    }
+    if (board[r][c] && !board[r][c].isVoid) {
+      const oldColor = board[r][c].color;
+      const others = getActiveColors().filter(cl => cl !== oldColor);
+      board[r][c] = { color: rand(others), isVoid: false };
+      endColorChange(r, c);
+    }
+    return;
+  }
+
+  // --- PLACE TILE ---
+  const tile = queue[0];
+  if (!tile) return;
+  const valid = getValidCells(tile);
+  if (!valid.some(v => v.r === r && v.c === c)) return;
+
+  board[r][c] = { color: tile.color, isVoid: false };
+  turnCount++;
+  missionTurnCounter++;
+
+  // Void block spawning (2500+)
+  const lv = getLevel();
+  if (lv.voidBlocks) {
+    voidTurnCounter++;
+    if (voidTurnCounter >= 5) {
+      voidTurnCounter = 0;
+      spawnVoidBlock();
+    }
+  }
+
+  renderBoard();
+  // Place animation
+  const idx = r * BOARD_SIZE + c;
+  const tileEl = document.getElementById('board').children[idx].querySelector('.tile');
+  if (tileEl) tileEl.classList.add('place');
+
+  advanceQueue();
+  renderQueue();
+
+  inputLocked = true;
+  setTimeout(() => { inputLocked = false; resolveAfterPlace(); }, 300);
+}
+
+function endColorChange(r, c) {
+  colorChangeMode = false;
+  setStatus(null);
+  renderAll();
+  // Animate swap
+  const idx = r * BOARD_SIZE + c;
+  const tileEl = document.getElementById('board').children[idx].querySelector('.tile');
+  if (tileEl) tileEl.classList.add('color-swap');
+
+  inputLocked = true;
+  setTimeout(() => {
+    inputLocked = false;
+    // 1500+: auto change another tile
+    const lv = getLevel();
+    if (lv.autoChange) {
+      doAutoColorChange(() => resolveAfterColorChange());
+    } else {
+      resolveAfterColorChange();
+    }
+  }, 600);
+}
+
+function doAutoColorChange(callback) {
+  // Pick a random valid (non-void) tile that exists
+  const candidates = [];
+  for (let r = 0; r < BOARD_SIZE; r++)
+    for (let c = 0; c < BOARD_SIZE; c++)
+      if (board[r][c] && !board[r][c].isVoid) candidates.push({ r, c });
+  if (candidates.length === 0) { callback(); return; }
+
+  const pick = rand(candidates);
+  const oldColor = board[pick.r][pick.c].color;
+  const others = getActiveColors().filter(cl => cl !== oldColor);
+  board[pick.r][pick.c] = { color: rand(others), isVoid: false };
+
+  setStatus('자동 색상 변경!');
+  renderAll();
+  const idx = pick.r * BOARD_SIZE + pick.c;
+  const tileEl = document.getElementById('board').children[idx].querySelector('.tile');
+  if (tileEl) tileEl.classList.add('color-swap');
+
+  inputLocked = true;
+  setTimeout(() => {
+    inputLocked = false;
+    setStatus(null);
+    callback();
+  }, 600);
+}
+
+function advanceQueue() {
+  queue.shift();
+  const newTile = generateTile(true);
+  if (newTile) queue.push(newTile);
+  while (queue.length < 3) {
+    const t = generateTile(true);
+    if (t) queue.push(t);
+    else break;
+  }
+}
+
+// --- RESOLVE PHASES ---
+function resolveAfterPlace() {
+  const matches = findMatches();
+  if (matches.length > 0) {
+    combo++;
+    if (combo > maxCombo) maxCombo = combo;
+    if (combo >= 2) showPopup(`${combo} COMBO!`, 'combo-popup');
+
+    const cellsToRemove = collectCells(matches);
+    const clearedList = setToList(cellsToRemove);
+
+    let missionDone = checkMissionComplete(clearedList);
+    score += calcScore(cellsToRemove.size, combo, missionDone);
+    if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
+
+    checkLevelUp();
+
+    animateRemoval(cellsToRemove, clearedList, () => {
+      // After clearing, enter color change mode (mandatory)
+      enterColorChangeMode();
+    });
+  } else {
+    // No match: combo resets
+    combo = 0;
+    updateComboDisplay();
+    maybeNewMission();
+    renderAll();
+    checkGameOver();
+  }
+}
+
+function resolveAfterColorChange() {
+  const matches = findMatches();
+  if (matches.length > 0) {
+    combo++;
+    if (combo > maxCombo) maxCombo = combo;
+    if (combo >= 2) showPopup(`${combo} COMBO!`, 'combo-popup');
+
+    const cellsToRemove = collectCells(matches);
+    const clearedList = setToList(cellsToRemove);
+
+    let missionDone = checkMissionComplete(clearedList);
+    score += calcScore(cellsToRemove.size, combo, missionDone);
+    if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
+
+    checkLevelUp();
+
+    animateRemoval(cellsToRemove, clearedList, () => {
+      resolveChain();
+    });
+  } else {
+    maybeNewMission();
+    renderAll();
+    checkGameOver();
+  }
+}
+
+function resolveChain() {
+  const matches = findMatches();
+  if (matches.length > 0) {
+    combo++;
+    if (combo > maxCombo) maxCombo = combo;
+    if (combo >= 2) showPopup(`${combo} COMBO!`, 'combo-popup');
+
+    const cellsToRemove = collectCells(matches);
+    const clearedList = setToList(cellsToRemove);
+
+    let missionDone = checkMissionComplete(clearedList);
+    score += calcScore(cellsToRemove.size, combo, missionDone);
+    if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
+
+    checkLevelUp();
+
+    animateRemoval(cellsToRemove, clearedList, () => resolveChain());
+  } else {
+    maybeNewMission();
+    renderAll();
+    checkGameOver();
+  }
+}
+
+function calcScore(cleared, combo, missionDone) {
+  let s = cleared * 10;
+  if (combo >= 2) s += combo * 5;
+  if (missionDone && currentMission) s += currentMission.bonus;
+  return s;
+}
+
+function setToList(set) {
+  return [...set].map(k => { const [r, c] = k.split(',').map(Number); return { r, c }; });
+}
+
+function animateRemoval(cellsToRemove, clearedList, callback) {
+  renderAll();
+  const boardEl = document.getElementById('board');
+  for (const key of cellsToRemove) {
+    const [rr, cc] = key.split(',').map(Number);
+    const idx = rr * BOARD_SIZE + cc;
+    const tileEl = boardEl.children[idx].querySelector('.tile');
+    if (tileEl) tileEl.classList.add('pop');
+  }
+
+  inputLocked = true;
+  setTimeout(() => {
+    // Crack adjacent voids before removing
+    const cracked = crackAdjacentVoids(clearedList);
+
+    for (const key of cellsToRemove) {
+      const [rr, cc] = key.split(',').map(Number);
+      board[rr][cc] = null;
+    }
+
+    // Animate cracked voids
+    if (cracked.length > 0) {
+      renderAll();
+      const boardEl2 = document.getElementById('board');
+      for (const { r, c } of cracked) {
+        const idx = r * BOARD_SIZE + c;
+        const tileEl = boardEl2.children[idx].querySelector('.tile');
+        if (tileEl) tileEl.classList.add('color-swap');
+      }
+      setTimeout(() => { inputLocked = false; callback(); }, 400);
+    } else {
+      inputLocked = false;
+      callback();
+    }
+  }, 450);
+}
+
+function enterColorChangeMode() {
+  colorChangeMode = true;
+  if (hasTilesOnBoard()) {
+    setStatus('색상 변경! 타일을 클릭하세요');
+  } else {
+    setStatus('빈 칸을 클릭하면 랜덤 타일 생성');
+  }
+  renderBoard();
+}
+
+function maybeNewMission() {
+  if (missionTurnCounter >= 3) {
+    missionTurnCounter = 0;
+    generateMission();
+  }
+}
+
+function checkGameOver() {
+  if (!queue[0]) { gameOver(); return; }
+  if (getValidCells(queue[0]).length === 0) { gameOver(); return; }
+}
+
+function gameOver() {
+  gameActive = false;
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-combo').textContent = maxCombo >= 2 ? `최대 콤보: ${maxCombo}` : '';
+  const lv = getLevel();
+  const cNames = ALL_COLORS.slice(0, lv.colors).map(c => COLOR_KR[c]).join('');
+  document.getElementById('final-level').textContent = `도달 색상: ${cNames}`;
+  document.getElementById('game-over').classList.add('active');
+}
+
+// ============================================================
+// INIT
+// ============================================================
+function initGame() {
+  initBoard();
+  score = 0;
+  combo = 0;
+  maxCombo = 0;
+  colorChangeMode = false;
+  inputLocked = false;
+  gameActive = true;
+  turnCount = 0;
+  missionTurnCounter = 0;
+  voidTurnCounter = 0;
+  prevLevel = LEVELS[0];
+  voidSpawnedAt2500 = false;
+  currentMission = null;
+
+  document.getElementById('game-over').classList.remove('active');
+  setStatus(null);
+
+  queue = [];
+  for (let i = 0; i < 3; i++) queue.push(generateTile(false));
+
+  generateMission();
+  renderLabels();
+  renderAll();
+}
+
+initGame();
+</script>
+</body>
+</html>
