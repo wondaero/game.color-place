@@ -269,14 +269,84 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   100% { transform: scale(1); filter: brightness(1); }
 }
 
-/* Colors */
-.color-red { background: #EA4335; }
-.color-orange { background: #FF6D01; }
-.color-yellow { background: #FBBC04; }
-.color-green { background: #34A853; }
-.color-blue { background: #4285F4; }
-.color-indigo { background: #4B0082; }
-.color-violet { background: #9B59B6; }
+/* Colors - set dynamically by theme */
+.color-red { background: var(--c-red); }
+.color-orange { background: var(--c-orange); }
+.color-yellow { background: var(--c-yellow); }
+.color-green { background: var(--c-green); }
+.color-blue { background: var(--c-blue); }
+.color-indigo { background: var(--c-indigo); }
+.color-violet { background: var(--c-violet); }
+
+/* Theme selector */
+#theme-btn {
+  position: absolute;
+  top: 16px;
+  right: 12px;
+  background: rgba(255,255,255,0.1);
+  border: 1px solid rgba(255,255,255,0.2);
+  color: #ccc;
+  font-size: 18px;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  z-index: 30;
+}
+#theme-btn:active { background: rgba(255,255,255,0.2); }
+#theme-panel {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.7);
+  z-index: 100;
+  justify-content: center;
+  align-items: center;
+}
+#theme-panel.active { display: flex; }
+#theme-list {
+  background: #2a2a3e;
+  border-radius: 16px;
+  padding: 20px;
+  width: 90%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+#theme-list h3 {
+  text-align: center;
+  font-size: 16px;
+  color: #fff;
+  margin-bottom: 4px;
+}
+.theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  border: 2px solid transparent;
+  background: rgba(255,255,255,0.05);
+  transition: border-color 0.2s;
+}
+.theme-option.selected { border-color: #fff; }
+.theme-option:active { background: rgba(255,255,255,0.1); }
+.theme-name {
+  font-size: 14px;
+  color: #ddd;
+  flex: 1;
+}
+.theme-dots {
+  display: flex;
+  gap: 4px;
+}
+.theme-dots span {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: inline-block;
+}
 
 /* Game Over */
 #game-over {
@@ -322,12 +392,12 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 @keyframes comboAnim {
   0% { transform: translate(-50%,-50%) scale(0); opacity:1; }
   20% { transform: translate(-50%,-50%) scale(1.2); opacity:1; }
-  60% { transform: translate(-50%,-55%) scale(1); opacity:0.9; }
-  100% { transform: translate(-50%,-70%) scale(0.8); opacity:0; }
+  60% { transform: translate(-50%,-50%) scale(1); opacity:0.9; }
+  100% { transform: translate(-50%,-50%) scale(0.8); opacity:0; }
 }
 .mission-popup {
   position: fixed;
-  top: 40%; left: 50%;
+  top: 50%; left: 50%;
   transform: translate(-50%,-50%) scale(0);
   font-size: 24px;
   font-weight: bold;
@@ -340,12 +410,12 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 @keyframes missionAnim {
   0% { transform: translate(-50%,-50%) scale(0); opacity:1; }
   20% { transform: translate(-50%,-50%) scale(1.1); opacity:1; }
-  60% { transform: translate(-50%,-55%) scale(1); opacity:0.9; }
-  100% { transform: translate(-50%,-70%) scale(0.9); opacity:0; }
+  60% { transform: translate(-50%,-50%) scale(1); opacity:0.9; }
+  100% { transform: translate(-50%,-50%) scale(0.9); opacity:0; }
 }
 .level-popup {
   position: fixed;
-  top: 45%; left: 50%;
+  top: 50%; left: 50%;
   transform: translate(-50%,-50%) scale(0);
   font-size: 20px;
   font-weight: bold;
@@ -358,7 +428,8 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 </style>
 </head>
 <body>
-<div id="app">
+<div id="app" style="position:relative;">
+  <button id="theme-btn" onclick="toggleThemePanel()">🎨</button>
   <h1>Color Place</h1>
   <div id="top-bar">
     <div>SCORE <span class="val" id="score">0</span></div>
@@ -400,6 +471,10 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   </div>
 </div>
 
+<div id="theme-panel" onclick="if(event.target===this)toggleThemePanel()">
+  <div id="theme-list"></div>
+</div>
+
 <div id="game-over">
   <h2>GAME OVER</h2>
   <p>최종 점수: <span id="final-score">0</span></p>
@@ -414,7 +489,54 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 // ============================================================
 const ALL_COLORS = ['red','orange','yellow','green','blue','indigo','violet'];
 const COLOR_KR = {red:'빨',orange:'주',yellow:'노',green:'초',blue:'파',indigo:'남',violet:'보'};
-const COLOR_HEX = {red:'#EA4335',orange:'#FF6D01',yellow:'#FBBC04',green:'#34A853',blue:'#4285F4',indigo:'#4B0082',violet:'#9B59B6'};
+let COLOR_HEX = {red:'#FF6B6B',orange:'#FFA94D',yellow:'#FFE066',green:'#69DB7C',blue:'#74C0FC',indigo:'#B197FC',violet:'#F783AC'};
+
+const THEMES = {
+  pastel:  { name: '파스텔', hex: {red:'#FF6B6B',orange:'#FFA94D',yellow:'#FFE066',green:'#69DB7C',blue:'#74C0FC',indigo:'#B197FC',violet:'#F783AC'} },
+  jewel:   { name: '보석',   hex: {red:'#E63946',orange:'#E9A820',yellow:'#F4845F',green:'#2EC4B6',blue:'#457B9D',indigo:'#7B2D8E',violet:'#547AA5'} },
+  neon:    { name: '네온',   hex: {red:'#FF006E',orange:'#FF5400',yellow:'#FFBE0B',green:'#06D6A0',blue:'#118AB2',indigo:'#8338EC',violet:'#FF85A1'} },
+  earth:   { name: '어스',   hex: {red:'#C97C7C',orange:'#C77B5A',yellow:'#D4A843',green:'#8DB580',blue:'#6B8CAE',indigo:'#A67DB8',violet:'#7CA982'} },
+  candy:   { name: '캔디',   hex: {red:'#FF7EB3',orange:'#FF9671',yellow:'#FFC75F',green:'#9EDE73',blue:'#4ECDC4',indigo:'#7C83FD',violet:'#C490E4'} },
+};
+let currentTheme = localStorage.getItem('colorplace-theme') || 'pastel';
+
+function applyTheme(themeId) {
+  currentTheme = themeId;
+  localStorage.setItem('colorplace-theme', themeId);
+  const t = THEMES[themeId].hex;
+  COLOR_HEX = {...t};
+  const root = document.documentElement.style;
+  ALL_COLORS.forEach(c => root.setProperty('--c-' + c, t[c]));
+  // Update theme panel selection
+  document.querySelectorAll('.theme-option').forEach(el => {
+    el.classList.toggle('selected', el.dataset.theme === themeId);
+  });
+  // Re-render if game is running
+  try { if (board && board.length) renderAll(); } catch(e) {}
+}
+
+function buildThemePanel() {
+  const list = document.getElementById('theme-list');
+  list.innerHTML = '<h3>색상 테마</h3>';
+  for (const [id, theme] of Object.entries(THEMES)) {
+    const opt = document.createElement('div');
+    opt.className = 'theme-option' + (id === currentTheme ? ' selected' : '');
+    opt.dataset.theme = id;
+    const dots = ALL_COLORS.map(c => `<span style="background:${theme.hex[c]}"></span>`).join('');
+    opt.innerHTML = `<span class="theme-name">${theme.name}</span><div class="theme-dots">${dots}</div>`;
+    opt.onclick = () => { applyTheme(id); toggleThemePanel(); };
+    list.appendChild(opt);
+  }
+}
+
+function toggleThemePanel() {
+  const panel = document.getElementById('theme-panel');
+  panel.classList.toggle('active');
+}
+
+// Init theme on load
+buildThemePanel();
+applyTheme(currentTheme);
 const BOARD_SIZE = 5;
 
 // Tile types:
@@ -830,7 +952,8 @@ function renderQueue() {
       const num = document.createElement('div');
       num.className = 'tile-num';
       num.textContent = t.num;
-      num.style.color = hasColor ? COLOR_HEX[t.color] : '#333';
+      // Cross tiles (5,6) have no line background, so use white for contrast
+      num.style.color = (t.type === 5 || t.type === 6) ? '#fff' : (hasColor ? COLOR_HEX[t.color] : '#333');
       preview.appendChild(num);
     }
   }
