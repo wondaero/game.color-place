@@ -103,8 +103,24 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   left: 50%; top: 0;
   transform: translateX(-50%);
 }
+/* Cross: both lines */
+.queue-slot .tile-preview .tile-line.cross-h {
+  width: 100%; height: 30%;
+  top: 50%; left: 0;
+  transform: translateY(-50%);
+}
+.queue-slot .tile-preview .tile-line.cross-v {
+  width: 30%; height: 100%;
+  left: 50%; top: 0;
+  transform: translateX(-50%);
+}
 
-/* Mission - fixed height to prevent board shift (max: vertical 5 = 5*12 + 4*2 = 68px) */
+/* Colorless tile preview */
+.color-unknown {
+  background: #666 !important;
+}
+
+/* Mission */
 #mission-area {
   display: flex;
   align-items: center;
@@ -130,7 +146,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 }
 #mission-bonus { color: #FBBC04; font-size: 12px; font-weight: bold; }
 
-/* Status - fixed height */
+/* Status */
 #status-area {
   min-height: 28px;
   display: flex;
@@ -222,7 +238,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 .cell .tile.place { animation: placeAnim 0.25s ease-out; }
 .cell .tile.color-swap { animation: swapAnim 0.5s ease-out; }
 
-/* Void tile: half color, half gray */
+/* Void tile */
 .cell .tile.void-tile {
   border-radius: 50%;
   position: relative;
@@ -235,15 +251,6 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   width: 50%; height: 100%;
   background: #555;
   border-radius: 0 999px 999px 0;
-}
-.cell .tile.void-crack {
-  animation: crackAnim 0.5s ease-out forwards;
-}
-@keyframes crackAnim {
-  0% { transform: scale(1); filter: brightness(1); }
-  30% { transform: scale(1.1); filter: brightness(2); }
-  60% { transform: scale(1.05); }
-  100% { transform: scale(1); filter: brightness(1); }
 }
 
 @keyframes popAnim {
@@ -262,7 +269,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   100% { transform: scale(1); filter: brightness(1); }
 }
 
-/* Colors - Rainbow order */
+/* Colors */
 .color-red { background: #EA4335; }
 .color-orange { background: #FF6D01; }
 .color-yellow { background: #FBBC04; }
@@ -310,11 +317,12 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   text-shadow: 0 0 20px rgba(233,69,96,0.6);
   pointer-events: none;
   z-index: 50;
-  animation: comboAnim 0.8s ease-out forwards;
+  animation: comboAnim 1.6s ease-out forwards;
 }
 @keyframes comboAnim {
   0% { transform: translate(-50%,-50%) scale(0); opacity:1; }
-  30% { transform: translate(-50%,-50%) scale(1.2); opacity:1; }
+  20% { transform: translate(-50%,-50%) scale(1.2); opacity:1; }
+  60% { transform: translate(-50%,-55%) scale(1); opacity:0.9; }
   100% { transform: translate(-50%,-70%) scale(0.8); opacity:0; }
 }
 .mission-popup {
@@ -327,11 +335,12 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   text-shadow: 0 0 15px rgba(251,188,4,0.5);
   pointer-events: none;
   z-index: 50;
-  animation: missionAnim 1s ease-out forwards;
+  animation: missionAnim 1.8s ease-out forwards;
 }
 @keyframes missionAnim {
   0% { transform: translate(-50%,-50%) scale(0); opacity:1; }
-  30% { transform: translate(-50%,-50%) scale(1.1); opacity:1; }
+  20% { transform: translate(-50%,-50%) scale(1.1); opacity:1; }
+  60% { transform: translate(-50%,-55%) scale(1); opacity:0.9; }
   100% { transform: translate(-50%,-70%) scale(0.9); opacity:0; }
 }
 .level-popup {
@@ -344,7 +353,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   text-shadow: 0 0 15px rgba(66,133,244,0.5);
   pointer-events: none;
   z-index: 50;
-  animation: missionAnim 1.2s ease-out forwards;
+  animation: missionAnim 1.8s ease-out forwards;
 }
 </style>
 </head>
@@ -401,56 +410,62 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 
 <script>
 // ============================================================
-// COLOR LEVELS
+// CONSTANTS
 // ============================================================
 const ALL_COLORS = ['red','orange','yellow','green','blue','indigo','violet'];
 const COLOR_KR = {red:'빨',orange:'주',yellow:'노',green:'초',blue:'파',indigo:'남',violet:'보'};
 const COLOR_HEX = {red:'#EA4335',orange:'#FF6D01',yellow:'#FBBC04',green:'#34A853',blue:'#4285F4',indigo:'#4B0082',violet:'#9B59B6'};
+const BOARD_SIZE = 5;
 
+// Tile types:
+// 1: color fixed, free placement
+// 2: color random, free placement
+// 3: color fixed, row or col (EXISTING)
+// 4: color random, row or col
+// 5: color fixed, cross (row+col)
+// 6: color random, cross (row+col)
+const TILE_WEIGHTS = [
+  { type: 3, weight: 90 },
+  { type: 1, weight: 2 },
+  { type: 2, weight: 2 },
+  { type: 4, weight: 2 },
+  { type: 5, weight: 2 },
+  { type: 6, weight: 2 },
+];
+const TOTAL_WEIGHT = TILE_WEIGHTS.reduce((s, w) => s + w.weight, 0);
+
+// Levels
 const LEVELS = [
   { minScore: 0,    colors: 4, label: '' },
   { minScore: 500,  colors: 5, label: '+파 해금!' },
   { minScore: 1000, colors: 6, label: '+남 해금!' },
-  { minScore: 1500, colors: 6, label: '자동 색변경!' , autoChange: true },
-  { minScore: 2000, colors: 7, label: '+보 해금!' , autoChange: true },
-  { minScore: 2500, colors: 7, label: '무효블록 등장!' , autoChange: true, voidBlocks: true },
+  { minScore: 1500, colors: 6, label: '자동 색변경!', autoChange: true },
+  { minScore: 2000, colors: 7, label: '+보 해금!', autoChange: true },
+  { minScore: 2500, colors: 7, label: '무효블록 등장!', autoChange: true, voidBlocks: true },
 ];
 
-function getLevel() {
-  let lv = LEVELS[0];
-  for (const l of LEVELS) {
-    if (score >= l.minScore) lv = l;
-  }
-  return lv;
-}
-
-function getActiveColors() {
-  return ALL_COLORS.slice(0, getLevel().colors);
-}
-
-// ============================================================
-// MISSION SHAPES
-// ============================================================
+// Mission shapes
 const MISSION_SHAPES = [
-  { id:'h3', name:'ㅡ3', cells:[[0,0],[0,1],[0,2]], bonus:30 },
-  { id:'h4', name:'ㅡ4', cells:[[0,0],[0,1],[0,2],[0,3]], bonus:50 },
-  { id:'h5', name:'ㅡ5', cells:[[0,0],[0,1],[0,2],[0,3],[0,4]], bonus:80 },
-  { id:'v3', name:'ㅣ3', cells:[[0,0],[1,0],[2,0]], bonus:30 },
-  { id:'v4', name:'ㅣ4', cells:[[0,0],[1,0],[2,0],[3,0]], bonus:50 },
-  { id:'v5', name:'ㅣ5', cells:[[0,0],[1,0],[2,0],[3,0],[4,0]], bonus:80 },
-  { id:'giyeok', name:'ㄱ', cells:[[0,0],[0,1],[1,1]], bonus:40 },
-  { id:'nieun', name:'ㄴ', cells:[[0,0],[1,0],[1,1]], bonus:40 },
-  { id:'L', name:'L', cells:[[0,0],[1,0],[2,0],[2,1]], bonus:50 },
-  { id:'T', name:'T', cells:[[0,0],[0,1],[0,2],[1,1]], bonus:50 },
-  { id:'sq', name:'ㅁ', cells:[[0,0],[0,1],[1,0],[1,1]], bonus:60 },
+  { id:'h3', cells:[[0,0],[0,1],[0,2]], bonus:30 },
+  { id:'h4', cells:[[0,0],[0,1],[0,2],[0,3]], bonus:50 },
+  { id:'h5', cells:[[0,0],[0,1],[0,2],[0,3],[0,4]], bonus:80 },
+  { id:'v3', cells:[[0,0],[1,0],[2,0]], bonus:30 },
+  { id:'v4', cells:[[0,0],[1,0],[2,0],[3,0]], bonus:50 },
+  { id:'v5', cells:[[0,0],[1,0],[2,0],[3,0],[4,0]], bonus:80 },
+  { id:'giyeok', cells:[[0,0],[0,1],[1,1]], bonus:40 },
+  { id:'nieun', cells:[[0,0],[1,0],[1,1]], bonus:40 },
+  { id:'L', cells:[[0,0],[1,0],[2,0],[2,1]], bonus:50 },
+  { id:'T', cells:[[0,0],[0,1],[0,2],[1,1]], bonus:50 },
+  { id:'sq', cells:[[0,0],[0,1],[1,0],[1,1]], bonus:60 },
+  { id:'S', cells:[[0,0],[0,1],[1,1],[1,2]], bonus:50 },
+  { id:'Z', cells:[[0,1],[0,2],[1,0],[1,1]], bonus:50 },
 ];
 
 // ============================================================
 // STATE
 // ============================================================
-const BOARD_SIZE = 5;
 let board = [];       // null | { color, isVoid }
-let queue = [];
+let queue = [];       // { type, color(or null), dir(or null), num(or null) }
 let score = 0;
 let combo = 0;
 let maxCombo = 0;
@@ -469,6 +484,16 @@ let voidSpawnedAt2500 = false;
 // ============================================================
 function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
+
+function getLevel() {
+  let lv = LEVELS[0];
+  for (const l of LEVELS) if (score >= l.minScore) lv = l;
+  return lv;
+}
+
+function getActiveColors() {
+  return ALL_COLORS.slice(0, getLevel().colors);
+}
 
 // ============================================================
 // BOARD
@@ -496,31 +521,11 @@ function getAvailableLines() {
   return lines;
 }
 
-function generateTile(useBoard) {
-  const colors = getActiveColors();
-  let dir, num;
-  if (useBoard) {
-    const lines = getAvailableLines();
-    if (lines.length === 0) return null;
-    const pick = rand(lines);
-    dir = pick.dir; num = pick.num;
-  } else {
-    dir = rand(['row', 'col']);
-    num = randInt(1, BOARD_SIZE);
-  }
-  return { color: rand(colors), dir, num };
-}
-
-function getValidCells(tile) {
-  const cells = [];
-  if (tile.dir === 'row') {
-    const r = tile.num - 1;
-    for (let c = 0; c < BOARD_SIZE; c++) if (cellPlayable(r, c)) cells.push({ r, c });
-  } else {
-    const c = tile.num - 1;
-    for (let r = 0; r < BOARD_SIZE; r++) if (cellPlayable(r, c)) cells.push({ r, c });
-  }
-  return cells;
+function hasAnyEmptyCell() {
+  for (let r = 0; r < BOARD_SIZE; r++)
+    for (let c = 0; c < BOARD_SIZE; c++)
+      if (!board[r][c]) return true;
+  return false;
 }
 
 function hasTilesOnBoard() {
@@ -538,6 +543,116 @@ function isBoardEmpty() {
 }
 
 // ============================================================
+// TILE GENERATION
+// ============================================================
+function pickTileType() {
+  let r = Math.random() * TOTAL_WEIGHT;
+  for (const tw of TILE_WEIGHTS) {
+    r -= tw.weight;
+    if (r <= 0) return tw.type;
+  }
+  return 3;
+}
+
+function generateTile(useBoard) {
+  const colors = getActiveColors();
+  const type = pickTileType();
+  const hasColor = (type === 1 || type === 3 || type === 5);
+  const color = hasColor ? rand(colors) : null;
+
+  // Types 1,2: free placement - no dir/num
+  if (type === 1 || type === 2) {
+    if (useBoard && !hasAnyEmptyCell()) return null;
+    return { type, color, dir: null, num: null };
+  }
+
+  // Types 3,4: single line
+  if (type === 3 || type === 4) {
+    let dir, num;
+    if (useBoard) {
+      const lines = getAvailableLines();
+      if (lines.length === 0) return null;
+      const pick = rand(lines);
+      dir = pick.dir; num = pick.num;
+    } else {
+      dir = rand(['row', 'col']);
+      num = randInt(1, BOARD_SIZE);
+    }
+    return { type, color, dir, num };
+  }
+
+  // Types 5,6: cross (row+col with same num)
+  if (type === 5 || type === 6) {
+    if (useBoard) {
+      // Need a num where either its row or col has empty cells
+      const validNums = [];
+      for (let n = 1; n <= BOARD_SIZE; n++) {
+        const r = n - 1, c = n - 1;
+        let hasEmpty = false;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+          if (!cellOccupied(r, i) || !cellOccupied(i, c)) { hasEmpty = true; break; }
+        }
+        if (hasEmpty) validNums.push(n);
+      }
+      if (validNums.length === 0) return null;
+      return { type, color, dir: 'cross', num: rand(validNums) };
+    } else {
+      return { type, color, dir: 'cross', num: randInt(1, BOARD_SIZE) };
+    }
+  }
+
+  return { type: 3, color: rand(colors), dir: rand(['row','col']), num: randInt(1, BOARD_SIZE) };
+}
+
+function getValidCells(tile) {
+  const cells = [];
+  if (!tile) return cells;
+
+  // Type 1,2: all empty cells
+  if (tile.type === 1 || tile.type === 2) {
+    for (let r = 0; r < BOARD_SIZE; r++)
+      for (let c = 0; c < BOARD_SIZE; c++)
+        if (cellPlayable(r, c)) cells.push({ r, c });
+    return cells;
+  }
+
+  // Type 3,4: single line
+  if (tile.type === 3 || tile.type === 4) {
+    if (tile.dir === 'row') {
+      const r = tile.num - 1;
+      for (let c = 0; c < BOARD_SIZE; c++) if (cellPlayable(r, c)) cells.push({ r, c });
+    } else {
+      const c = tile.num - 1;
+      for (let r = 0; r < BOARD_SIZE; r++) if (cellPlayable(r, c)) cells.push({ r, c });
+    }
+    return cells;
+  }
+
+  // Type 5,6: cross
+  if (tile.type === 5 || tile.type === 6) {
+    const n = tile.num - 1;
+    const added = new Set();
+    // Row n
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (cellPlayable(n, c) && !added.has(`${n},${c}`)) {
+        cells.push({ r: n, c });
+        added.add(`${n},${c}`);
+      }
+    }
+    // Col n
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      if (cellPlayable(r, n) && !added.has(`${r},${n}`)) {
+        cells.push({ r, c: n });
+        added.add(`${r},${n}`);
+      }
+    }
+    return cells;
+  }
+
+  return cells;
+}
+
+// ============================================================
 // VOID BLOCKS
 // ============================================================
 function spawnVoidBlock() {
@@ -547,16 +662,13 @@ function spawnVoidBlock() {
       if (!board[r][c]) emptyCells.push({ r, c });
   if (emptyCells.length === 0) return;
   const pos = rand(emptyCells);
-  const colors = getActiveColors();
-  board[pos.r][pos.c] = { color: rand(colors), isVoid: true };
+  board[pos.r][pos.c] = { color: rand(getActiveColors()), isVoid: true };
 }
 
-// Check void blocks adjacent to cleared cells, crack them
 function crackAdjacentVoids(clearedCells) {
   const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
   const cracked = [];
   const clearedSet = new Set(clearedCells.map(c => `${c.r},${c.c}`));
-
   for (const { r, c } of clearedCells) {
     for (const [dr, dc] of dirs) {
       const nr = r + dr, nc = c + dc;
@@ -567,8 +679,6 @@ function crackAdjacentVoids(clearedCells) {
       }
     }
   }
-
-  // Convert void to valid
   for (const { r, c } of cracked) {
     board[r][c] = { color: board[r][c].color, isVoid: false };
   }
@@ -582,7 +692,6 @@ function findMatches() {
   const visited = Array.from({ length: BOARD_SIZE }, () => new Array(BOARD_SIZE).fill(false));
   const groups = [];
   const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
-
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
       if (visited[r][c] || !board[r][c] || board[r][c].isVoid) continue;
@@ -628,13 +737,11 @@ function renderMission() {
   const bonus = document.getElementById('mission-bonus');
   grid.innerHTML = '';
   if (!currentMission) { bonus.textContent = ''; return; }
-
   const cells = currentMission.cells;
   const maxR = Math.max(...cells.map(c => c[0])) + 1;
   const maxC = Math.max(...cells.map(c => c[1])) + 1;
   grid.style.gridTemplateColumns = `repeat(${maxC}, 12px)`;
   grid.style.gridTemplateRows = `repeat(${maxR}, 12px)`;
-
   const cellSet = new Set(cells.map(c => `${c[0]},${c[1]}`));
   for (let r = 0; r < maxR; r++) {
     for (let c = 0; c < maxC; c++) {
@@ -686,7 +793,6 @@ function renderBoard() {
     for (let c = 0; c < BOARD_SIZE; c++) {
       const cell = document.createElement('div');
       cell.className = 'cell';
-
       const data = board[r][c];
       if (data) {
         const tile = document.createElement('div');
@@ -695,9 +801,7 @@ function renderBoard() {
         cell.appendChild(tile);
         if (colorChangeMode && !data.isVoid) cell.classList.add('change-target');
       }
-
       if (validCells.some(v => v.r === r && v.c === c)) cell.classList.add('highlight');
-
       cell.addEventListener('click', () => onCellClick(r, c));
       boardEl.appendChild(cell);
     }
@@ -710,20 +814,24 @@ function renderQueue() {
     const t = queue[i];
     const preview = document.getElementById(`qp-${ids[i]}`);
     preview.innerHTML = '';
-    if (t) {
-      preview.className = `tile-preview color-${t.color}`;
-      // Line (horizontal or vertical)
+    if (!t) { preview.className = 'tile-preview'; continue; }
+
+    const hasColor = (t.color !== null);
+    preview.className = `tile-preview ${hasColor ? 'color-' + t.color : 'color-unknown'}`;
+
+    // Lines based on type
+    if (t.type === 3 || t.type === 4) {
       const line = document.createElement('div');
       line.className = `tile-line ${t.dir === 'row' ? 'horizontal' : 'vertical'}`;
       preview.appendChild(line);
-      // Number
+    }
+    // Number (only for types with position)
+    if (t.num !== null) {
       const num = document.createElement('div');
       num.className = 'tile-num';
       num.textContent = t.num;
-      num.style.color = COLOR_HEX[t.color];
+      num.style.color = hasColor ? COLOR_HEX[t.color] : '#333';
       preview.appendChild(num);
-    } else {
-      preview.className = 'tile-preview';
     }
   }
 }
@@ -774,7 +882,7 @@ function showPopup(text, cls) {
   el.className = cls;
   el.textContent = text;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 1200);
+  setTimeout(() => el.remove(), 2000);
 }
 
 // ============================================================
@@ -784,8 +892,6 @@ function checkLevelUp() {
   const newLevel = getLevel();
   if (prevLevel && newLevel.minScore > prevLevel.minScore) {
     if (newLevel.label) showPopup(newLevel.label, 'level-popup');
-
-    // 2500 first time: spawn void immediately
     if (newLevel.voidBlocks && !voidSpawnedAt2500) {
       voidSpawnedAt2500 = true;
       voidTurnCounter = 0;
@@ -804,7 +910,6 @@ function onCellClick(r, c) {
   // --- COLOR CHANGE ---
   if (colorChangeMode) {
     if (!hasTilesOnBoard()) {
-      // No valid tiles: spawn random
       if (!board[r][c]) {
         board[r][c] = { color: rand(getActiveColors()), isVoid: false };
         endColorChange(r, c);
@@ -826,11 +931,13 @@ function onCellClick(r, c) {
   const valid = getValidCells(tile);
   if (!valid.some(v => v.r === r && v.c === c)) return;
 
-  board[r][c] = { color: tile.color, isVoid: false };
+  // Determine color: if colorless, random
+  const placedColor = tile.color || rand(getActiveColors());
+  board[r][c] = { color: placedColor, isVoid: false };
   turnCount++;
   missionTurnCounter++;
 
-  // Void block spawning (2500+)
+  // Void block spawning
   const lv = getLevel();
   if (lv.voidBlocks) {
     voidTurnCounter++;
@@ -841,7 +948,6 @@ function onCellClick(r, c) {
   }
 
   renderBoard();
-  // Place animation
   const idx = r * BOARD_SIZE + c;
   const tileEl = document.getElementById('board').children[idx].querySelector('.tile');
   if (tileEl) tileEl.classList.add('place');
@@ -857,7 +963,6 @@ function endColorChange(r, c) {
   colorChangeMode = false;
   setStatus(null);
   renderAll();
-  // Animate swap
   const idx = r * BOARD_SIZE + c;
   const tileEl = document.getElementById('board').children[idx].querySelector('.tile');
   if (tileEl) tileEl.classList.add('color-swap');
@@ -865,7 +970,6 @@ function endColorChange(r, c) {
   inputLocked = true;
   setTimeout(() => {
     inputLocked = false;
-    // 1500+: auto change another tile
     const lv = getLevel();
     if (lv.autoChange) {
       doAutoColorChange(() => resolveAfterColorChange());
@@ -876,7 +980,6 @@ function endColorChange(r, c) {
 }
 
 function doAutoColorChange(callback) {
-  // Pick a random valid (non-void) tile that exists
   const candidates = [];
   for (let r = 0; r < BOARD_SIZE; r++)
     for (let c = 0; c < BOARD_SIZE; c++)
@@ -913,29 +1016,37 @@ function advanceQueue() {
   }
 }
 
-// --- RESOLVE PHASES ---
+// ============================================================
+// SCORE: combo multiplier
+// ============================================================
+function calcScore(cleared, comboNum, missionDone) {
+  // Base: cleared * 10 * comboMultiplier
+  let s = cleared * 10 * Math.max(comboNum, 1);
+  if (missionDone && currentMission) s += currentMission.bonus;
+  return s;
+}
+
+// ============================================================
+// RESOLVE PHASES
+// ============================================================
 function resolveAfterPlace() {
   const matches = findMatches();
   if (matches.length > 0) {
     combo++;
     if (combo > maxCombo) maxCombo = combo;
-    if (combo >= 2) showPopup(`${combo} COMBO!`, 'combo-popup');
+    if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
     const clearedList = setToList(cellsToRemove);
-
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
-
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => {
-      // After clearing, enter color change mode (mandatory)
       enterColorChangeMode();
     });
   } else {
-    // No match: combo resets
     combo = 0;
     updateComboDisplay();
     maybeNewMission();
@@ -949,20 +1060,16 @@ function resolveAfterColorChange() {
   if (matches.length > 0) {
     combo++;
     if (combo > maxCombo) maxCombo = combo;
-    if (combo >= 2) showPopup(`${combo} COMBO!`, 'combo-popup');
+    if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
     const clearedList = setToList(cellsToRemove);
-
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
-
     checkLevelUp();
 
-    animateRemoval(cellsToRemove, clearedList, () => {
-      resolveChain();
-    });
+    animateRemoval(cellsToRemove, clearedList, () => resolveChain());
   } else {
     maybeNewMission();
     renderAll();
@@ -975,15 +1082,13 @@ function resolveChain() {
   if (matches.length > 0) {
     combo++;
     if (combo > maxCombo) maxCombo = combo;
-    if (combo >= 2) showPopup(`${combo} COMBO!`, 'combo-popup');
+    if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
     const clearedList = setToList(cellsToRemove);
-
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
-
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveChain());
@@ -992,13 +1097,6 @@ function resolveChain() {
     renderAll();
     checkGameOver();
   }
-}
-
-function calcScore(cleared, combo, missionDone) {
-  let s = cleared * 10;
-  if (combo >= 2) s += combo * 5;
-  if (missionDone && currentMission) s += currentMission.bonus;
-  return s;
 }
 
 function setToList(set) {
@@ -1017,7 +1115,6 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
 
   inputLocked = true;
   setTimeout(() => {
-    // Crack adjacent voids before removing
     const cracked = crackAdjacentVoids(clearedList);
 
     for (const key of cellsToRemove) {
@@ -1025,13 +1122,11 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
       board[rr][cc] = null;
     }
 
-    // Board clear bonus
     if (isBoardEmpty()) {
       score += 100;
       showPopup('CLEAR! +100', 'mission-popup');
     }
 
-    // Animate cracked voids
     if (cracked.length > 0) {
       renderAll();
       const boardEl2 = document.getElementById('board');
