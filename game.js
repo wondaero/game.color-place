@@ -1104,7 +1104,7 @@ function executeSkill(skillId, r, c, placedColor, callback) {
     case 'h2': {
       const targets = [];
       for (let cc = 0; cc < BOARD_SIZE; cc++)
-        if (board[r][cc] && !(r === r && cc === c) && !board[r][cc].isVoid)
+        if (cc !== c && board[r][cc] && !board[r][cc].isVoid)
           targets.push({ r, c: cc });
       animateSkillRemoval(targets, true, callback);
       break;
@@ -1114,7 +1114,7 @@ function executeSkill(skillId, r, c, placedColor, callback) {
     case 'h3': {
       const targets = [];
       for (let rr = 0; rr < BOARD_SIZE; rr++)
-        if (board[rr][c] && !(rr === r && c === c) && !board[rr][c].isVoid)
+        if (rr !== r && board[rr][c] && !board[rr][c].isVoid)
           targets.push({ r: rr, c });
       animateSkillRemoval(targets, true, callback);
       break;
@@ -1124,9 +1124,9 @@ function executeSkill(skillId, r, c, placedColor, callback) {
     case 'h4': {
       const targets = [];
       for (let cc = 0; cc < BOARD_SIZE; cc++)
-        if (board[r][cc] && !(r === r && cc === c)) targets.push({ r, c: cc });
+        if (cc !== c && board[r][cc] && !board[r][cc].isVoid) targets.push({ r, c: cc });
       for (let rr = 0; rr < BOARD_SIZE; rr++)
-        if (board[rr][c] && !(rr === r) && !board[rr][c].isVoid) targets.push({ r: rr, c });
+        if (rr !== r && board[rr][c] && !board[rr][c].isVoid) targets.push({ r: rr, c });
       animateSkillRemoval(targets, true, callback);
       break;
     }
@@ -1524,6 +1524,13 @@ function exitGame() {
   history.back();
 }
 
+function resetSave() {
+  if (!confirm('모든 데이터를 초기화하시겠습니까?')) return;
+  localStorage.removeItem(SAVE_KEY);
+  saveData = getDefaultSave();
+  showIntro();
+}
+
 function showMissionScreen() {
   currentScreen = 'mission';
   history.pushState({ screen: 'mission' }, '');
@@ -1598,20 +1605,19 @@ function renderUnlockList() {
   const cc = saveData.colorCollected;
   const ach = saveData.achievements;
   const skillProgress = [
-    { id: 's1', current: ach.boardClear ? 1 : 0, goal: 1, cond: '보드클리어 1회', desc: '보드의 모든 타일을 제거하면 해금' },
-    { id: 's2', current: ach.combo3 ? 3 : 0, goal: 3, cond: '3콤보 달성', desc: '랜덤 타일 1개의 색상을 변경' },
-    { id: 's3', current: ach.combo4 ? 4 : 0, goal: 4, cond: '4콤보 달성', desc: '같은 색상 타일을 모두 다른 색으로 변경' },
-    { id: 's4', current: ach.combo5 ? 5 : 0, goal: 5, cond: '5콤보 달성', desc: '선택한 타일과 같은 색을 모두 지정 색으로 변경' },
-    { id: 's5', current: Math.min(cc.c5||0, 100), goal: 100, cond: '색상5 100개 수집', desc: '랜덤 타일 1개 제거 (점수 없음)' },
-    { id: 's6', current: Math.min(cc.c6||0, 100), goal: 100, cond: '색상6 100개 수집', desc: '랜덤 타일 1개 제거 (점수 있음)' },
-    { id: 's7', current: Math.min(cc.c7||0, 100), goal: 100, cond: '색상7 100개 수집', desc: '선택한 타일 1개 제거' },
-    { id: 's8', current: Math.min(cc.c5||0, 300), goal: 300, cond: '색상5 300개 수집', desc: '선택한 타일의 행 또는 열 전체 제거' },
-    { id: 's9', current: Math.min(cc.c6||0, 300), goal: 300, cond: '색상6 300개 수집', desc: '선택한 타일의 주변 8칸 제거' },
-    { id: 's10', current: Math.min(cc.c7||0, 300), goal: 300, cond: '색상7 300개 수집', desc: '선택한 타일의 행+열 십자 제거' },
-    { id: 's11', current: Math.min(cc.c7||0, 300), goal: 300, cond: '색상7 300개 수집', desc: '선택한 타일의 대각선 방향 제거' },
-    { id: 's12', current: Math.min(cc.c5||0, 500), goal: 500, cond: '색상5 500개 수집', desc: '선택한 타일의 색상을 복사하여 다른 타일에 적용' },
-    { id: 's13', current: Math.min(cc.c6||0, 500), goal: 500, cond: '색상6 500개 수집', desc: '선택한 색상의 모든 타일 제거' },
-    { id: 's14', current: Math.min(cc.c7||0, 500), goal: 500, cond: '색상7 500개 수집', desc: '보드의 모든 타일 제거' },
+    { id: 's1', current: ach.boardClear ? 1 : 0, goal: 1, cond: '보드클리어 1회', desc: '모든 타일을 놓은 공 색상으로 변경 (상쇄 전 발동)' },
+    { id: 's2', current: ach.combo3 ? 3 : 0, goal: 3, cond: '3콤보 달성', desc: '주변 랜덤 1개를 놓은 공 색상으로 변경' },
+    { id: 's3', current: ach.combo4 ? 4 : 0, goal: 4, cond: '4콤보 달성', desc: '주변 랜덤 2개를 놓은 공 색상으로 변경' },
+    { id: 's4', current: ach.combo5 ? 5 : 0, goal: 5, cond: '5콤보 달성', desc: '주변 선택 1개를 놓은 공 색상으로 변경' },
+    { id: 's5', current: Math.min(cc.c5||0, 100), goal: 100, cond: '색상5 100개 수집', desc: '주변 선택 1개 제거 (점수 없음)' },
+    { id: 's6', current: Math.min(cc.c6||0, 100), goal: 100, cond: '색상6 100개 수집', desc: '주변 선택 1개 제거 (점수 있음)' },
+    { id: 's7', current: Math.min(cc.c7||0, 100), goal: 100, cond: '색상7 100개 수집', desc: '전체 중 선택 1개 제거 (점수 있음)' },
+    { id: 's8', current: Math.min(cc.c5||0, 300), goal: 300, cond: '색상5 300개 수집', desc: '놓은 곳 주변 전체 제거 (상쇄 먼저)' },
+    { id: 's9', current: Math.min(cc.c6||0, 300), goal: 300, cond: '색상6 300개 수집', desc: '전체 중 선택 → 그 주변 제거 (상쇄 먼저)' },
+    { id: 's10', current: Math.min(cc.c7||0, 300), goal: 300, cond: '색상7 300개 수집', desc: '전체 중 선택 → 주변을 같은 색으로 변경 (상쇄 먼저)' },
+    { id: 's11', current: Math.min(cc.c5||0, 500), goal: 500, cond: '색상5 500개 수집', desc: '놓기 전 보드에서 색상을 복사 (스포이드)' },
+    { id: 's12', current: Math.min(cc.c6||0, 500), goal: 500, cond: '색상6 500개 수집', desc: '놓은 공과 같은 색상 타일 전체 제거' },
+    { id: 's13', current: Math.min(cc.c7||0, 500), goal: 500, cond: '색상7 500개 수집', desc: '보드의 모든 타일 제거' },
   ];
   for (const sp of skillProgress) {
     const sk = SKILL_DEFS.find(s => s.id === sp.id);
@@ -1620,14 +1626,34 @@ function renderUnlockList() {
   }
   el.appendChild(skillSection);
 
+  // Hidden missions
+  const hiddenSection = document.createElement('div');
+  hiddenSection.className = 'unlock-section';
+  hiddenSection.innerHTML = '<div class="unlock-section-title">히든 미션</div>';
+  const hid = saveData.hidden;
+  const hiddenProgress = [
+    { id: 'h1', done: hid.zeroScore, cond: '???', desc: '???' },
+    { id: 'h2', done: hid.rowClear, cond: '???', desc: '???' },
+    { id: 'h3', done: hid.colClear, cond: '???', desc: '???' },
+    { id: 'h4', done: hid.crossClear, cond: '???', desc: '???' },
+  ];
+  for (const hp of hiddenProgress) {
+    const sk = SKILL_DEFS.find(s => s.id === hp.id);
+    const name = hp.done ? (sk ? sk.name : hp.id) : '???';
+    const desc = hp.done ? hp.desc : null;
+    const cond = hp.done ? hp.cond : null;
+    hiddenSection.appendChild(makeProgressItem(name, hp.done ? 1 : 0, 1, hp.done, cond, desc));
+  }
+  el.appendChild(hiddenSection);
+
   // Color collection progress
   const collectSection = document.createElement('div');
   collectSection.className = 'unlock-section';
   collectSection.innerHTML = '<div class="unlock-section-title">색상 수집</div>';
   const colorInfo = [
-    { key: 'c5', goal: 500, desc: '100개: 스킬 해금 / 300개: 스킬 해금 / 500개: 스킬 해금' },
-    { key: 'c6', goal: 500, desc: '100개: 스킬 해금 / 300개: 스킬 해금 / 500개: 스킬 해금' },
-    { key: 'c7', goal: 500, desc: '100개: 스킬 해금 / 300개: 스킬 해금 / 500개: 스킬 해금' },
+    { key: 'c5', goal: 500, desc: '100개: 주변제거(무점) / 300개: 주변전체제거 / 500개: 스포이드' },
+    { key: 'c6', goal: 500, desc: '100개: 주변제거(유점) / 300개: 선택주변제거 / 500개: 색상전체제거' },
+    { key: 'c7', goal: 500, desc: '100개: 선택제거 / 300개: 주변동색화 / 500개: 보드전체제거' },
   ];
   for (const ci of colorInfo) {
     const count = cc[ci.key] || 0;

@@ -111,6 +111,16 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   font-size: 14px;
   padding: 10px 0;
 }
+#btn-reset {
+  background: transparent;
+  color: #D32F2F;
+  font-size: 12px;
+  padding: 8px 0;
+  border: none;
+  cursor: pointer;
+  margin-top: 20px;
+  opacity: 0.5;
+}
 
 /* Mission/Unlock Screen */
 #mission-screen {
