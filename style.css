@@ -29,6 +29,182 @@ body {
 }
 h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 
+/* Intro */
+#intro {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  width: 100%;
+  max-width: 420px;
+  gap: 20px;
+  padding: 40px 20px;
+}
+.intro-title {
+  font-size: 36px;
+  letter-spacing: 4px;
+  color: #fff;
+  text-align: center;
+}
+.intro-deco {
+  display: flex;
+  gap: 10px;
+  margin: 8px 0;
+}
+.deco-ball {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background-image:
+    radial-gradient(circle at 35% 30%, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 50%),
+    radial-gradient(circle at 65% 70%, rgba(0,0,0,0.15) 0%, rgba(0,0,0,0) 50%);
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.25);
+  animation: decoFloat 2s ease-in-out infinite alternate;
+}
+.deco-ball:nth-child(2) { animation-delay: 0.3s; }
+.deco-ball:nth-child(3) { animation-delay: 0.6s; }
+.deco-ball:nth-child(4) { animation-delay: 0.9s; }
+.deco-ball:nth-child(5) { animation-delay: 1.2s; }
+@keyframes decoFloat {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-6px); }
+}
+#intro-highscore {
+  font-size: 16px;
+  color: #FBBC04;
+  font-weight: bold;
+}
+#intro-stats {
+  font-size: 12px;
+  color: #666;
+}
+.intro-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 220px;
+  margin-top: 10px;
+}
+.intro-buttons button {
+  padding: 14px 0;
+  font-size: 18px;
+  font-weight: bold;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.intro-buttons button:active { transform: scale(0.97); }
+#btn-start {
+  background: #e94560;
+  color: #fff;
+}
+#btn-mission {
+  background: #16213e;
+  color: #FBBC04;
+  border: 2px solid #0f3460;
+}
+#btn-exit {
+  background: transparent;
+  color: #555;
+  font-size: 14px;
+  padding: 10px 0;
+}
+
+/* Mission/Unlock Screen */
+#mission-screen {
+  display: none;
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: #1a1a2e;
+  z-index: 200;
+  flex-direction: column;
+  align-items: center;
+  padding: 40px 20px;
+  gap: 16px;
+  overflow-y: auto;
+}
+#mission-screen.active { display: flex; }
+#mission-screen h2 { font-size: 24px; color: #fff; letter-spacing: 2px; }
+#unlock-list {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unlock-section {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.unlock-section-title {
+  font-size: 13px;
+  color: #FBBC04;
+  font-weight: bold;
+  margin-bottom: 6px;
+  letter-spacing: 1px;
+}
+.unlock-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  padding: 10px 12px;
+  background: #16213e;
+  border-radius: 8px;
+  font-size: 13px;
+}
+.unlock-item.completed { opacity: 0.6; }
+.unlock-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.unlock-item .name { color: #eee; font-weight: 500; }
+.unlock-item .progress-text { color: #aaa; font-size: 11px; }
+.unlock-item .status { font-size: 14px; }
+.unlock-desc { color: #888; font-size: 11px; line-height: 1.3; }
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  background: #0a0f1e;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.progress-bar .fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+.progress-bar .fill.done { background: #4CAF50; }
+.progress-bar .fill.in-progress { background: #FBBC04; }
+#mission-screen button {
+  padding: 12px 32px;
+  font-size: 16px;
+  border: none;
+  border-radius: 10px;
+  background: #0f3460;
+  color: #fff;
+  cursor: pointer;
+  margin-top: 10px;
+}
+#mission-screen button:active { transform: scale(0.97); }
+
+/* Game Over sub button */
+#game-over .sub-btn {
+  padding: 10px 28px;
+  font-size: 14px;
+  border: none;
+  border-radius: 8px;
+  background: #16213e;
+  color: #888;
+  cursor: pointer;
+}
+#game-over .sub-btn:active { background: #0f3460; }
+
 /* Top bar */
 #top-bar {
   display: flex;
@@ -66,7 +242,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 .queue-slot.current .label{ color: #fff; }
 .queue-slot .tile-preview {
   width: 36px; height: 36px; border-radius: 50%;
-  overflow: hidden;
+  /* overflow: hidden; */
   transition: background 0.3s;
   position: relative;
   display: flex;

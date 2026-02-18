@@ -8,7 +8,32 @@
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
-<div id="app">
+
+<div id="intro">
+  <h1 class="intro-title">Color Place</h1>
+  <div class="intro-deco">
+    <div class="deco-ball color-c1"></div>
+    <div class="deco-ball color-c3"></div>
+    <div class="deco-ball color-c5"></div>
+    <div class="deco-ball color-c4"></div>
+    <div class="deco-ball color-c6"></div>
+  </div>
+  <div id="intro-highscore"></div>
+  <div id="intro-stats"></div>
+  <div class="intro-buttons">
+    <button id="btn-start" onclick="startGame()">게임시작</button>
+    <button id="btn-mission" onclick="showMissionScreen()">미션</button>
+    <button id="btn-exit" onclick="exitGame()">종료</button>
+  </div>
+</div>
+
+<div id="mission-screen">
+  <h2>해금 현황</h2>
+  <div id="unlock-list"></div>
+  <button onclick="closeMissionScreen()">돌아가기</button>
+</div>
+
+<div id="app" style="display:none">
   <h1>Color Place</h1>
   <div id="top-bar">
     <div>SCORE <span class="val" id="score">0</span></div>
@@ -55,7 +80,8 @@
   <p>최종 점수: <span id="final-score">0</span></p>
   <p class="sub" id="final-combo"></p>
   <p class="sub" id="final-level"></p>
-  <button onclick="initGame()">다시 시작</button>
+  <button onclick="startGame()">다시 시작</button>
+  <button class="sub-btn" onclick="backToIntro()">메인으로</button>
 </div>
 
 <script src="game.js"></script>
