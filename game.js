@@ -12,22 +12,107 @@ const COLOR_HEX = {c1:'#D32F2F',c2:'#6D4C41',c3:'#FBC02D',c4:'#388E3C',c5:'#1565
 })();
 const BOARD_SIZE = 5;
 
-// Tile types:
-// 1: color fixed, free placement
-// 2: color random, free placement
-// 3: color fixed, row or col (EXISTING)
-// 4: color random, row or col
-// 5: color fixed, cross (row+col)
-// 6: color random, cross (row+col)
-const TILE_WEIGHTS = [
-  { type: 3, weight: 90 },
-  { type: 1, weight: 2 },
-  { type: 2, weight: 2 },
-  { type: 4, weight: 2 },
-  { type: 5, weight: 2 },
-  { type: 6, weight: 2 },
+// Tile types & unlock thresholds (games played)
+// type 3 always available, rest unlock at milestones
+const ALL_TILE_TYPES = [
+  { type: 3, weight: 90, unlockGames: 0 },
+  { type: 4, weight: 2,  unlockGames: 100 },
+  { type: 5, weight: 2,  unlockGames: 200 },
+  { type: 6, weight: 2,  unlockGames: 300 },
+  { type: 1, weight: 2,  unlockGames: 500 },
+  { type: 2, weight: 2,  unlockGames: 1000 },
 ];
-const TOTAL_WEIGHT = TILE_WEIGHTS.reduce((s, w) => s + w.weight, 0);
+
+// Skill definitions
+const SKILL_DEFS = [
+  { id:'s1',  name:'올체인지',     weight:25, unlock:'boardClear' },
+  { id:'s2',  name:'랜덤변경',     weight:25, unlock:'combo3' },
+  { id:'s3',  name:'동색변경',     weight:25, unlock:'combo4' },
+  { id:'s4',  name:'선택동색',     weight:25, unlock:'combo5' },
+  { id:'s5',  name:'랜덤제거(무점)', weight:25, unlock:'c5_100' },
+  { id:'s6',  name:'랜덤제거(유점)', weight:25, unlock:'c6_100' },
+  { id:'s7',  name:'선택제거',     weight:25, unlock:'c7_100' },
+  { id:'s8',  name:'행열제거',     weight:25, unlock:'c5_300' },
+  { id:'s9',  name:'주변제거',     weight:25, unlock:'c6_300' },
+  { id:'s10', name:'행열십자제거',  weight:25, unlock:'c7_300' },
+  { id:'s11', name:'대각선제거',   weight:25, unlock:'c7_300b' },
+  { id:'s12', name:'스포이드',     weight:25, unlock:'c5_500' },
+  { id:'s13', name:'색상전체제거', weight:25, unlock:'c6_500' },
+  { id:'s14', name:'보드전체제거', weight:25, unlock:'c7_500' },
+];
+// weight 25 out of 10000 = 0.25%
+// Skills that do matching FIRST, then remove (상쇄 먼저)
+const MATCH_FIRST_SKILLS = ['s8', 's9', 's10', 's11'];
+
+// ============================================================
+// SAVE DATA (localStorage)
+// ============================================================
+const SAVE_KEY = 'colorplace-save';
+
+function getDefaultSave() {
+  return {
+    totalGames: 0,
+    highScore: 0,
+    unlockedSkills: [],
+    colorCollected: { c5: 0, c6: 0, c7: 0 },
+    achievements: {
+      boardClear: false,
+      combo3: false,
+      combo4: false,
+      combo5: false,
+    },
+  };
+}
+
+function loadSave() {
+  try {
+    const raw = localStorage.getItem(SAVE_KEY);
+    if (!raw) return getDefaultSave();
+    const data = JSON.parse(raw);
+    // Merge with defaults for forward compatibility
+    const def = getDefaultSave();
+    return {
+      totalGames: data.totalGames || def.totalGames,
+      highScore: data.highScore || def.highScore,
+      unlockedSkills: data.unlockedSkills || def.unlockedSkills,
+      colorCollected: { ...def.colorCollected, ...data.colorCollected },
+      achievements: { ...def.achievements, ...data.achievements },
+    };
+  } catch(e) { return getDefaultSave(); }
+}
+
+function writeSave(save) {
+  localStorage.setItem(SAVE_KEY, JSON.stringify(save));
+}
+
+let saveData = loadSave();
+
+// Get available tile types based on totalGames
+function getUnlockedTileWeights() {
+  return ALL_TILE_TYPES.filter(t => saveData.totalGames >= t.unlockGames);
+}
+
+// Get available skills based on unlocked list
+function getUnlockedSkills() {
+  return SKILL_DEFS.filter(s => saveData.unlockedSkills.includes(s.id));
+}
+
+// Pick a skill (or null) for a new tile
+function pickSkill() {
+  const unlocked = getUnlockedSkills();
+  if (unlocked.length === 0) return null;
+  // Total pool: 10000 (=100%), each skill weight=25 (0.25%)
+  const skillTotal = unlocked.reduce((s, sk) => s + sk.weight, 0);
+  const noSkillWeight = 10000 - skillTotal;
+  const roll = Math.random() * 10000;
+  if (roll < noSkillWeight) return null;
+  let r = roll - noSkillWeight;
+  for (const sk of unlocked) {
+    r -= sk.weight;
+    if (r <= 0) return sk.id;
+  }
+  return null;
+}
 
 // Levels
 const LEVELS = [
@@ -66,6 +151,10 @@ let missionTurnCounter = 0;
 let voidTurnCounter = 0;
 let prevLevel = null;
 let voidSpawnedAt2500 = false;
+let sessionBoardCleared = false;
+let sessionColorCount = { c5: 0, c6: 0, c7: 0 };
+let missionStreak = 0; // consecutive mission successes
+let pendingSkill = null; // { skillId, r, c, color } for match-first skills
 
 // ============================================================
 // UTILITY
@@ -134,8 +223,10 @@ function isBoardEmpty() {
 // TILE GENERATION
 // ============================================================
 function pickTileType() {
-  let r = Math.random() * TOTAL_WEIGHT;
-  for (const tw of TILE_WEIGHTS) {
+  const available = getUnlockedTileWeights();
+  const total = available.reduce((s, t) => s + t.weight, 0);
+  let r = Math.random() * total;
+  for (const tw of available) {
     r -= tw.weight;
     if (r <= 0) return tw.type;
   }
@@ -147,11 +238,12 @@ function generateTile(useBoard) {
   const type = pickTileType();
   const hasColor = (type === 1 || type === 3 || type === 5);
   const color = hasColor ? rand(colors) : null;
+  const skill = pickSkill();
 
   // Types 1,2: free placement - no dir/num
   if (type === 1 || type === 2) {
     if (useBoard && !hasAnyEmptyCell()) return null;
-    return { type, color, dir: null, num: null };
+    return { type, color, dir: null, num: null, skill };
   }
 
   // Types 3,4: single line
@@ -166,13 +258,12 @@ function generateTile(useBoard) {
       dir = rand(['row', 'col']);
       num = randInt(1, BOARD_SIZE);
     }
-    return { type, color, dir, num };
+    return { type, color, dir, num, skill };
   }
 
   // Types 5,6: cross (row+col with same num)
   if (type === 5 || type === 6) {
     if (useBoard) {
-      // Need a num where either its row or col has empty cells
       const validNums = [];
       for (let n = 1; n <= BOARD_SIZE; n++) {
         const r = n - 1, c = n - 1;
@@ -183,13 +274,13 @@ function generateTile(useBoard) {
         if (hasEmpty) validNums.push(n);
       }
       if (validNums.length === 0) return null;
-      return { type, color, dir: 'cross', num: rand(validNums) };
+      return { type, color, dir: 'cross', num: rand(validNums), skill };
     } else {
-      return { type, color, dir: 'cross', num: randInt(1, BOARD_SIZE) };
+      return { type, color, dir: 'cross', num: randInt(1, BOARD_SIZE), skill };
     }
   }
 
-  return { type: 3, color: rand(colors), dir: rand(['row','col']), num: randInt(1, BOARD_SIZE) };
+  return { type: 3, color: rand(colors), dir: rand(['row','col']), num: randInt(1, BOARD_SIZE), skill };
 }
 
 function getValidCells(tile) {
@@ -338,7 +429,10 @@ function renderMission() {
       grid.appendChild(dot);
     }
   }
-  bonus.textContent = `+${currentMission.bonus}`;
+  let bonusText = `+${currentMission.bonus}`;
+  if (missionStreak >= 2) bonusText += ' x2';
+  else if (missionStreak >= 1) bonusText += ' +10';
+  bonus.textContent = bonusText;
 }
 
 function getRotations(cells) {
@@ -375,7 +469,9 @@ function renderBoard() {
   const boardEl = document.getElementById('board');
   boardEl.innerHTML = '';
   const currentTile = queue[0];
-  const validCells = (currentTile && !colorChangeMode && !inputLocked) ? getValidCells(currentTile) : [];
+  // Only show placement highlights when NOT in any special mode
+  const showPlacement = currentTile && !colorChangeMode && !inputLocked && !spoideMode && !skillSelectMode;
+  const validCells = showPlacement ? getValidCells(currentTile) : [];
 
   for (let r = 0; r < BOARD_SIZE; r++) {
     for (let c = 0; c < BOARD_SIZE; c++) {
@@ -390,6 +486,10 @@ function renderBoard() {
         if (colorChangeMode && !data.isVoid) cell.classList.add('change-target');
       }
       if (validCells.some(v => v.r === r && v.c === c)) cell.classList.add('highlight');
+      // Skill select mode: highlight candidates with special style
+      if (skillSelectMode && skillSelectMode.candidates.some(n => n.r === r && n.c === c)) cell.classList.add('skill-target');
+      // Spoide mode: highlight clickable tiles
+      if (spoideMode && data && !data.isVoid) cell.classList.add('spoide-target');
       cell.addEventListener('click', () => onCellClick(r, c));
       boardEl.appendChild(cell);
     }
@@ -428,6 +528,16 @@ function renderQueue() {
       }
       preview.appendChild(num);
     }
+
+    // Skill badge
+    if (t.skill) {
+      const badge = document.createElement('div');
+      badge.className = 'skill-badge';
+      const skillNum = t.skill.replace('s','');
+      badge.textContent = skillNum;
+      badge.title = (SKILL_DEFS.find(s => s.id === t.skill) || {}).name || '';
+      preview.appendChild(badge);
+    }
   }
 }
 
@@ -464,14 +574,37 @@ function renderAll() {
   document.getElementById('score').textContent = score;
   updateComboDisplay();
   updateLevelDisplay();
+  // Check spoide mode
+  if (!spoideMode && !colorChangeMode && !skillSelectMode && queue[0] && queue[0].skill === 's12' && hasTilesOnBoard()) {
+    spoideMode = true;
+    setStatus('스포이드: 색을 복사할 공을 선택하세요');
+  }
 }
 
+// Sequential popup queue
+let popupQueue = [];
+let popupRunning = false;
+
 function showPopup(text, cls) {
+  popupQueue.push({ text, cls });
+  if (!popupRunning) processPopupQueue();
+}
+
+function processPopupQueue() {
+  if (popupQueue.length === 0) { popupRunning = false; return; }
+  popupRunning = true;
+  const { text, cls } = popupQueue.shift();
   const el = document.createElement('div');
   el.className = cls;
   el.textContent = text;
   document.body.appendChild(el);
-  setTimeout(() => el.remove(), 2000);
+  // If more popups waiting, show faster; otherwise full duration
+  const hasMore = popupQueue.length > 0;
+  const duration = hasMore ? 1000 : (cls === 'combo-popup' ? 1600 : 1800);
+  setTimeout(() => {
+    el.remove();
+    processPopupQueue();
+  }, duration);
 }
 
 // ============================================================
@@ -495,6 +628,26 @@ function checkLevelUp() {
 // ============================================================
 function onCellClick(r, c) {
   if (!gameActive || inputLocked) return;
+
+  // --- SKILL SELECT MODE ---
+  if (skillSelectMode) {
+    handleSkillSelect(r, c);
+    return;
+  }
+
+  // --- SPOIDE MODE (s12) ---
+  if (spoideMode) {
+    if (board[r][c] && !board[r][c].isVoid) {
+      // Copy color to current tile
+      queue[0].color = board[r][c].color;
+      queue[0].skill = null; // consumed
+      spoideMode = false;
+      setStatus(null);
+      renderQueue();
+      renderBoard();
+    }
+    return;
+  }
 
   // --- COLOR CHANGE ---
   if (colorChangeMode) {
@@ -536,6 +689,8 @@ function onCellClick(r, c) {
     }
   }
 
+  const placedSkill = tile.skill;
+
   renderBoard();
   const idx = r * BOARD_SIZE + c;
   const tileEl = document.getElementById('board').children[idx].querySelector('.tile');
@@ -545,7 +700,18 @@ function onCellClick(r, c) {
   renderQueue();
 
   inputLocked = true;
-  setTimeout(() => { inputLocked = false; resolveAfterPlace(); }, 300);
+  setTimeout(() => {
+    inputLocked = false;
+    if (placedSkill && MATCH_FIRST_SKILLS.includes(placedSkill)) {
+      // 상쇄 먼저: do matching first, then execute skill
+      pendingSkill = { skillId: placedSkill, r, c, color: placedColor };
+      resolveAfterPlace();
+    } else if (placedSkill) {
+      executeSkill(placedSkill, r, c, placedColor, () => resolveAfterPlace());
+    } else {
+      resolveAfterPlace();
+    }
+  }, 300);
 }
 
 function endColorChange(r, c) {
@@ -609,18 +775,291 @@ function advanceQueue() {
 }
 
 // ============================================================
+// SKILL EXECUTION
+// ============================================================
+function getNeighbors(r, c) {
+  const dirs = [[-1,-1],[-1,0],[-1,1],[0,-1],[0,1],[1,-1],[1,0],[1,1]];
+  const result = [];
+  for (const [dr, dc] of dirs) {
+    const nr = r + dr, nc = c + dc;
+    if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE) result.push({ r: nr, c: nc });
+  }
+  return result;
+}
+
+function getOccupiedNeighbors(r, c) {
+  return getNeighbors(r, c).filter(n => board[n.r][n.c] && !board[n.r][n.c].isVoid);
+}
+
+let skillSelectMode = null; // { type: 's4'|'s7', r, c, color, callback, candidates }
+let spoideMode = false; // s12: waiting to pick color from board
+
+// --- Skill animation helpers ---
+function animateSkillRemoval(targets, withScore, callback) {
+  if (targets.length === 0) { callback(); return; }
+  renderAll();
+  const boardEl = document.getElementById('board');
+  for (const { r, c } of targets) {
+    const idx = r * BOARD_SIZE + c;
+    const tileEl = boardEl.children[idx]?.querySelector('.tile');
+    if (tileEl) tileEl.classList.add('skill-remove');
+  }
+  inputLocked = true;
+  setTimeout(() => {
+    let count = 0;
+    for (const { r, c } of targets) {
+      if (board[r][c]) { board[r][c] = null; count++; }
+    }
+    if (withScore) score += count * 10;
+    renderAll();
+    setTimeout(() => { inputLocked = false; callback(); }, 200);
+  }, 550);
+}
+
+function animateSkillChange(targets, callback) {
+  if (targets.length === 0) { callback(); return; }
+  renderAll();
+  const boardEl = document.getElementById('board');
+  for (const { r, c } of targets) {
+    const idx = r * BOARD_SIZE + c;
+    const tileEl = boardEl.children[idx]?.querySelector('.tile');
+    if (tileEl) tileEl.classList.add('skill-change');
+  }
+  inputLocked = true;
+  setTimeout(() => { inputLocked = false; callback(); }, 550);
+}
+
+// --- Collect removal targets for skills ---
+function getSkillRemovalTargets(skillId, r, c) {
+  const targets = [];
+  switch (skillId) {
+    case 's8': {
+      const dir = rand(['row', 'col']);
+      if (dir === 'row') {
+        for (let cc = 0; cc < BOARD_SIZE; cc++)
+          if (board[r][cc] && cc !== c) targets.push({ r, c: cc });
+      } else {
+        for (let rr = 0; rr < BOARD_SIZE; rr++)
+          if (board[rr][c] && rr !== r) targets.push({ r: rr, c });
+      }
+      break;
+    }
+    case 's9': {
+      for (const n of getNeighbors(r, c))
+        if (board[n.r][n.c] && !board[n.r][n.c].isVoid) targets.push(n);
+      break;
+    }
+    case 's10': {
+      for (let cc = 0; cc < BOARD_SIZE; cc++)
+        if (board[r][cc] && cc !== c) targets.push({ r, c: cc });
+      for (let rr = 0; rr < BOARD_SIZE; rr++)
+        if (board[rr][c] && rr !== r) targets.push({ r: rr, c });
+      break;
+    }
+    case 's11': {
+      for (let i = -BOARD_SIZE; i <= BOARD_SIZE; i++) {
+        const r1 = r + i, c1 = c + i;
+        const r2 = r + i, c2 = c - i;
+        if (r1 >= 0 && r1 < BOARD_SIZE && c1 >= 0 && c1 < BOARD_SIZE && !(r1 === r && c1 === c) && board[r1][c1])
+          targets.push({ r: r1, c: c1 });
+        if (r2 >= 0 && r2 < BOARD_SIZE && c2 >= 0 && c2 < BOARD_SIZE && !(r2 === r && c2 === c) && board[r2][c2])
+          targets.push({ r: r2, c: c2 });
+      }
+      break;
+    }
+  }
+  return targets;
+}
+
+function executeSkill(skillId, r, c, placedColor, callback) {
+  showPopup(SKILL_DEFS.find(s => s.id === skillId).name + '!', 'level-popup');
+
+  switch(skillId) {
+    case 's1': { // 올체인지: 보드 모든 공을 놓은 공 색으로 변경
+      const targets = [];
+      for (let rr = 0; rr < BOARD_SIZE; rr++)
+        for (let cc = 0; cc < BOARD_SIZE; cc++)
+          if (board[rr][cc] && !board[rr][cc].isVoid) {
+            board[rr][cc].color = placedColor;
+            targets.push({ r: rr, c: cc });
+          }
+      animateSkillChange(targets, callback);
+      break;
+    }
+
+    case 's2': { // 랜덤변경: 주변 랜덤 1개 임의색 변경
+      const neighbors = getOccupiedNeighbors(r, c);
+      if (neighbors.length > 0) {
+        const pick = rand(neighbors);
+        board[pick.r][pick.c].color = rand(getActiveColors());
+        animateSkillChange([pick], callback);
+      } else { callback(); }
+      break;
+    }
+
+    case 's3': { // 동색변경: 주변 랜덤 1개를 같은색으로
+      const neighbors = getOccupiedNeighbors(r, c);
+      if (neighbors.length > 0) {
+        const pick = rand(neighbors);
+        board[pick.r][pick.c].color = placedColor;
+        animateSkillChange([pick], callback);
+      } else { callback(); }
+      break;
+    }
+
+    case 's4': { // 선택동색: 주변 중 선택 1개를 같은색으로
+      const candidates = getOccupiedNeighbors(r, c);
+      if (candidates.length === 0) { callback(); break; }
+      skillSelectMode = { type: 's4', r, c, color: placedColor, callback, candidates };
+      setStatus('변경할 주변 타일을 선택하세요');
+      renderBoard();
+      break;
+    }
+
+    case 's5': { // 랜덤제거(무점): 주변 랜덤 1개 제거
+      const neighbors = getOccupiedNeighbors(r, c);
+      if (neighbors.length > 0) {
+        animateSkillRemoval([rand(neighbors)], false, callback);
+      } else { callback(); }
+      break;
+    }
+
+    case 's6': { // 랜덤제거(유점): 주변 랜덤 1개 제거 + 점수
+      const neighbors = getOccupiedNeighbors(r, c);
+      if (neighbors.length > 0) {
+        animateSkillRemoval([rand(neighbors)], true, callback);
+      } else { callback(); }
+      break;
+    }
+
+    case 's7': { // 선택제거: 주변 중 선택 1개 제거 + 점수
+      const candidates = getOccupiedNeighbors(r, c);
+      if (candidates.length === 0) { callback(); break; }
+      skillSelectMode = { type: 's7', r, c, color: placedColor, callback, candidates };
+      setStatus('제거할 주변 타일을 선택하세요');
+      renderBoard();
+      break;
+    }
+
+    // s8~s11 are match-first: they arrive here AFTER matching is done
+    case 's8':   // 행열제거
+    case 's9':   // 주변제거
+    case 's10':  // 행열십자제거
+    case 's11': { // 대각선제거
+      const targets = getSkillRemovalTargets(skillId, r, c);
+      animateSkillRemoval(targets, true, callback);
+      break;
+    }
+
+    case 's13': { // 색상전체제거: 같은 색 모두 제거
+      const targets = [];
+      for (let rr = 0; rr < BOARD_SIZE; rr++)
+        for (let cc = 0; cc < BOARD_SIZE; cc++)
+          if (board[rr][cc] && board[rr][cc].color === placedColor && !(rr === r && cc === c))
+            targets.push({ r: rr, c: cc });
+      animateSkillRemoval(targets, true, callback);
+      break;
+    }
+
+    case 's14': { // 보드전체제거
+      const targets = [];
+      for (let rr = 0; rr < BOARD_SIZE; rr++)
+        for (let cc = 0; cc < BOARD_SIZE; cc++)
+          if (board[rr][cc] && !(rr === r && cc === c))
+            targets.push({ r: rr, c: cc });
+      animateSkillRemoval(targets, true, callback);
+      break;
+    }
+
+    case 's12': // 스포이드는 놓기 전에 처리 (별도 로직)
+    default:
+      callback();
+      break;
+  }
+}
+
+// Handle skill select mode clicks (s4, s7)
+function handleSkillSelect(r, c) {
+  if (!skillSelectMode) return false;
+  const { type, color, callback, candidates } = skillSelectMode;
+  const isCandidate = candidates.some(n => n.r === r && n.c === c);
+  if (!isCandidate) return true; // consumed click but invalid
+
+  skillSelectMode = null;
+  setStatus(null);
+
+  if (type === 's4') {
+    board[r][c].color = color;
+    animateSkillChange([{ r, c }], callback);
+  } else if (type === 's7') {
+    animateSkillRemoval([{ r, c }], true, callback);
+  }
+  return true;
+}
+
+// ============================================================
 // SCORE: combo multiplier
 // ============================================================
+function getMissionBonus() {
+  if (!currentMission) return 0;
+  let bonus = currentMission.bonus;
+  if (missionStreak >= 2) {
+    bonus *= 2; // 3+ consecutive: x2 (no +10)
+  } else if (missionStreak >= 1) {
+    bonus += 10; // 2 consecutive: +10
+  }
+  return bonus;
+}
+
+let lastMissionBonus = 0; // cached for popup display
+
 function calcScore(cleared, comboNum, missionDone) {
-  // Base: cleared * 10 * comboMultiplier
   let s = cleared * 10 * Math.max(comboNum, 1);
-  if (missionDone && currentMission) s += currentMission.bonus;
+  if (missionDone) {
+    lastMissionBonus = getMissionBonus();
+    s += lastMissionBonus;
+    missionStreak++;
+  }
   return s;
 }
 
 // ============================================================
 // RESOLVE PHASES
 // ============================================================
+
+// Called when all chains are done — check for pending skill, then finalize
+function finishResolve() {
+  if (pendingSkill) {
+    const ps = pendingSkill;
+    pendingSkill = null;
+    executeSkill(ps.skillId, ps.r, ps.c, ps.color, () => {
+      // After skill removal, check for new matches
+      const matches = findMatches();
+      if (matches.length > 0) {
+        combo = 1;
+        if (combo > maxCombo) maxCombo = combo;
+        const cellsToRemove = collectCells(matches);
+        const clearedList = setToList(cellsToRemove);
+        let missionDone = checkMissionComplete(clearedList);
+        score += calcScore(cellsToRemove.size, combo, missionDone);
+        if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+        checkLevelUp();
+        animateRemoval(cellsToRemove, clearedList, () => {
+          enterColorChangeMode();
+        });
+      } else {
+        maybeNewMission();
+        renderAll();
+        checkGameOver();
+      }
+    });
+    return;
+  }
+  maybeNewMission();
+  renderAll();
+  checkGameOver();
+}
+
 function resolveAfterPlace() {
   const matches = findMatches();
   if (matches.length > 0) {
@@ -632,7 +1071,7 @@ function resolveAfterPlace() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
+    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => {
@@ -641,9 +1080,7 @@ function resolveAfterPlace() {
   } else {
     combo = 0;
     updateComboDisplay();
-    maybeNewMission();
-    renderAll();
-    checkGameOver();
+    finishResolve();
   }
 }
 
@@ -658,14 +1095,12 @@ function resolveAfterColorChange() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
+    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveChain());
   } else {
-    maybeNewMission();
-    renderAll();
-    checkGameOver();
+    finishResolve();
   }
 }
 
@@ -680,14 +1115,12 @@ function resolveChain() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${currentMission.bonus}`, 'mission-popup'); generateMission(); }
+    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveChain());
   } else {
-    maybeNewMission();
-    renderAll();
-    checkGameOver();
+    finishResolve();
   }
 }
 
@@ -709,12 +1142,19 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
   setTimeout(() => {
     const cracked = crackAdjacentVoids(clearedList);
 
+    // Track color collection before removing
     for (const key of cellsToRemove) {
       const [rr, cc] = key.split(',').map(Number);
+      const cell = board[rr][cc];
+      if (cell && !cell.isVoid && (cell.color === 'c5' || cell.color === 'c6' || cell.color === 'c7')) {
+        sessionColorCount[cell.color]++;
+        saveData.colorCollected[cell.color]++;
+      }
       board[rr][cc] = null;
     }
 
     if (isBoardEmpty()) {
+      sessionBoardCleared = true;
       score += 100;
       showPopup('CLEAR! +100', 'mission-popup');
     }
@@ -748,6 +1188,7 @@ function enterColorChangeMode() {
 function maybeNewMission() {
   if (missionTurnCounter >= 3) {
     missionTurnCounter = 0;
+    missionStreak = 0; // failed to complete before timeout → reset streak
     generateMission();
   }
 }
@@ -759,10 +1200,82 @@ function checkGameOver() {
 
 function gameOver() {
   gameActive = false;
+
+  // Update save data
+  saveData.totalGames++;
+  if (score > saveData.highScore) saveData.highScore = score;
+
+  // Check achievement unlocks
+  const newUnlocks = [];
+
+  if (maxCombo >= 3 && !saveData.achievements.combo3) {
+    saveData.achievements.combo3 = true;
+    if (!saveData.unlockedSkills.includes('s2')) { saveData.unlockedSkills.push('s2'); newUnlocks.push('스킬: 랜덤변경'); }
+  }
+  if (maxCombo >= 4 && !saveData.achievements.combo4) {
+    saveData.achievements.combo4 = true;
+    if (!saveData.unlockedSkills.includes('s3')) { saveData.unlockedSkills.push('s3'); newUnlocks.push('스킬: 동색변경'); }
+  }
+  if (maxCombo >= 5 && !saveData.achievements.combo5) {
+    saveData.achievements.combo5 = true;
+    if (!saveData.unlockedSkills.includes('s4')) { saveData.unlockedSkills.push('s4'); newUnlocks.push('스킬: 선택동색'); }
+  }
+  if (sessionBoardCleared && !saveData.achievements.boardClear) {
+    saveData.achievements.boardClear = true;
+    if (!saveData.unlockedSkills.includes('s1')) { saveData.unlockedSkills.push('s1'); newUnlocks.push('스킬: 올체인지'); }
+  }
+
+  // Color collection skill unlocks
+  const colorSkillMap = [
+    { color:'c5', count:100, skill:'s5', name:'랜덤제거(무점)' },
+    { color:'c6', count:100, skill:'s6', name:'랜덤제거(유점)' },
+    { color:'c7', count:100, skill:'s7', name:'선택제거' },
+    { color:'c5', count:300, skill:'s8', name:'행열제거' },
+    { color:'c6', count:300, skill:'s9', name:'주변제거' },
+    { color:'c7', count:300, skill:'s10', name:'행열십자제거' },
+    { color:'c7', count:300, skill:'s11', name:'대각선제거' },
+    { color:'c5', count:500, skill:'s12', name:'스포이드' },
+    { color:'c6', count:500, skill:'s13', name:'색상전체제거' },
+    { color:'c7', count:500, skill:'s14', name:'보드전체제거' },
+  ];
+  for (const entry of colorSkillMap) {
+    if (saveData.colorCollected[entry.color] >= entry.count && !saveData.unlockedSkills.includes(entry.skill)) {
+      saveData.unlockedSkills.push(entry.skill);
+      newUnlocks.push(`스킬: ${entry.name}`);
+    }
+  }
+
+  // Tile type unlocks
+  const typeUnlockMap = [
+    { games: 100, type: 4, name: '색상미지정 줄공' },
+    { games: 200, type: 5, name: '색상지정 십자공' },
+    { games: 300, type: 6, name: '색상미지정 십자공' },
+    { games: 500, type: 1, name: '색상지정 자유배치' },
+    { games: 1000, type: 2, name: '색상미지정 자유배치' },
+  ];
+  for (const entry of typeUnlockMap) {
+    if (saveData.totalGames >= entry.games) {
+      // Check if this is newly unlocked (totalGames just crossed)
+      if (saveData.totalGames - 1 < entry.games) {
+        newUnlocks.push(`타일: ${entry.name}`);
+      }
+    }
+  }
+
+  writeSave(saveData);
+
+  // Display
   document.getElementById('final-score').textContent = score;
   document.getElementById('final-combo').textContent = maxCombo >= 2 ? `최대 콤보: ${maxCombo}` : '';
-  const lv = getLevel();
-  document.getElementById('final-level').textContent = '';
+
+  const unlockEl = document.getElementById('final-level');
+  if (newUnlocks.length > 0) {
+    unlockEl.innerHTML = newUnlocks.map(u => `🔓 ${u}`).join('<br>');
+    unlockEl.style.color = '#FBBC04';
+  } else {
+    unlockEl.textContent = '';
+  }
+
   document.getElementById('game-over').classList.add('active');
 }
 
@@ -782,7 +1295,16 @@ function initGame() {
   voidTurnCounter = 0;
   prevLevel = LEVELS[0];
   voidSpawnedAt2500 = false;
+  sessionBoardCleared = false;
+  sessionColorCount = { c5: 0, c6: 0, c7: 0 };
+  spoideMode = false;
+  skillSelectMode = null;
+  pendingSkill = null;
+  missionStreak = 0;
   currentMission = null;
+  popupQueue = [];
+  popupRunning = false;
+  saveData = loadSave();
 
   document.getElementById('game-over').classList.remove('active');
   setStatus(null);
