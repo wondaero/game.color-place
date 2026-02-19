@@ -26,29 +26,29 @@ const ALL_TILE_TYPES = [
 // Skill definitions
 const SKILL_DEFS = [
   // 업적 기반
-  { id:'s1',  name:'올체인지',       weight:25 }, // 보드클리어: 모든 타일을 놓은 색으로 변경 (상쇄 전)
-  { id:'s2',  name:'주변동색(1)',    weight:25 }, // 3콤보: 주변 랜덤 1개 같은색 변경
-  { id:'s3',  name:'주변동색(2)',    weight:25 }, // 4콤보: 주변 랜덤 2개 같은색 변경
-  { id:'s4',  name:'주변선택동색',   weight:25 }, // 5콤보: 주변 선택 1개 같은색 변경
+  { id:'s1',  name:'올체인지',       weight:25, desc:'모든 타일을 놓은 공 색상으로 변경' },
+  { id:'s2',  name:'주변동색(1)',    weight:25, desc:'주변 랜덤 1개를 놓은 공 색상으로 변경' },
+  { id:'s3',  name:'주변동색(2)',    weight:25, desc:'주변 랜덤 2개를 놓은 공 색상으로 변경' },
+  { id:'s4',  name:'주변선택동색',   weight:25, desc:'주변 선택 1개를 놓은 공 색상으로 변경' },
   // 색상 수집 기반
-  { id:'s5',  name:'주변제거(무점)', weight:25 }, // c5 100: 주변 선택 1개 제거 (점수x)
-  { id:'s6',  name:'주변제거(유점)', weight:25 }, // c6 100: 주변 선택 1개 제거 (점수o)
-  { id:'s7',  name:'선택제거',       weight:25 }, // c7 100: 전체 선택 1개 제거 (점수o)
-  { id:'s8',  name:'주변전체제거',   weight:25 }, // c5 300: 놓은 곳 주변 전체 제거 (상쇄 먼저)
-  { id:'s9',  name:'선택주변제거',   weight:25 }, // c6 300: 전체 선택 → 주변 제거 (상쇄 먼저)
-  { id:'s10', name:'주변동색화',     weight:25 }, // c7 300: 전체 선택 → 주변 같은색 (상쇄 먼저)
-  { id:'s11', name:'스포이드',       weight:25 }, // c5 500: 놓기 전 색상 복사
-  { id:'s12', name:'색상전체제거',   weight:25 }, // c6 500: 해당 색상 모두 제거
-  { id:'s13', name:'보드전체제거',   weight:25 }, // c7 500: 보드 전체 제거
+  { id:'s5',  name:'주변제거(무점)', weight:25, desc:'주변 선택 1개 제거 (점수 없음)' },
+  { id:'s6',  name:'주변제거(유점)', weight:25, desc:'주변 선택 1개 제거 (점수 있음)' },
+  { id:'s7',  name:'선택제거',       weight:25, desc:'전체 중 선택 1개 제거 (점수 있음)' },
+  { id:'s8',  name:'주변전체제거',   weight:25, desc:'놓은 곳 주변 전체 제거 (상쇄 먼저)' },
+  { id:'s9',  name:'선택주변제거',   weight:25, desc:'선택한 곳의 주변 제거 (상쇄 먼저)' },
+  { id:'s10', name:'주변동색화',     weight:25, desc:'선택한 곳의 주변을 같은 색으로 변경 (상쇄 먼저)' },
+  { id:'s11', name:'스포이드',       weight:25, desc:'놓기 전 보드에서 색상 복사' },
+  { id:'s12', name:'색상전체제거',   weight:25, desc:'놓은 공과 같은 색상 타일 전체 제거' },
+  { id:'s13', name:'보드전체제거',   weight:25, desc:'보드의 모든 타일 제거' },
   // 히든미션 기반
-  { id:'h1',  name:'덮어쓰기',      weight:25 }, // 0점 게임오버: 타일 위에 배치 가능
-  { id:'h2',  name:'행제거',        weight:25 }, // 한행 클리어: 해당 행 제거 (상쇄 먼저)
-  { id:'h3',  name:'열제거',        weight:25 }, // 한열 클리어: 해당 열 제거 (상쇄 먼저)
-  { id:'h4',  name:'십자제거',      weight:25 }, // 십자 클리어: 십자 제거 (상쇄 먼저)
+  { id:'h1',  name:'덮어쓰기',      weight:25, desc:'기존 타일 위에 덮어서 배치 가능' },
+  { id:'h2',  name:'행제거',        weight:25, desc:'놓은 행 전체 제거 (상쇄 먼저)' },
+  { id:'h3',  name:'열제거',        weight:25, desc:'놓은 열 전체 제거 (상쇄 먼저)' },
+  { id:'h4',  name:'십자제거',      weight:25, desc:'놓은 행+열 십자 제거 (상쇄 먼저)' },
 ];
 // weight 25 out of 10000 = 0.25%
 // Skills that do matching FIRST, then remove/change (상쇄 먼저)
-const MATCH_FIRST_SKILLS = ['s8', 's9', 's10', 'h2', 'h3', 'h4'];
+const MATCH_FIRST_SKILLS = ['s8', 's9', 's10'];
 
 // ============================================================
 // SAVE DATA (localStorage)
@@ -574,16 +574,36 @@ function renderQueue() {
       preview.appendChild(num);
     }
 
-    // Skill badge
+    // Skill badge + click to show description
     if (t.skill) {
       const badge = document.createElement('div');
       badge.className = 'skill-badge';
-      const skillNum = t.skill.replace('s','');
-      badge.textContent = skillNum;
-      badge.title = (SKILL_DEFS.find(s => s.id === t.skill) || {}).name || '';
+      badge.textContent = t.skill.replace('s','').replace('h','H');
       preview.appendChild(badge);
+
+      const sk = SKILL_DEFS.find(s => s.id === t.skill);
+      if (sk) {
+        const slot = document.getElementById(`q-${ids[i]}`);
+        slot.onclick = () => showSkillTooltip(sk.name, sk.desc);
+      }
+    } else {
+      const slot = document.getElementById(`q-${ids[i]}`);
+      slot.onclick = null;
     }
   }
+}
+
+let skillTooltipTimer = null;
+function showSkillTooltip(name, desc) {
+  const el = document.getElementById('status');
+  el.textContent = `[${name}] ${desc}`;
+  el.classList.remove('hidden');
+  el.classList.add('skill-tooltip');
+  clearTimeout(skillTooltipTimer);
+  skillTooltipTimer = setTimeout(() => {
+    el.classList.add('hidden');
+    el.classList.remove('skill-tooltip');
+  }, 2500);
 }
 
 function renderLabels() {
@@ -695,13 +715,6 @@ function onCellClick(r, c) {
 
   // --- COLOR CHANGE ---
   if (colorChangeMode) {
-    if (!hasTilesOnBoard()) {
-      if (!board[r][c]) {
-        board[r][c] = { color: rand(getActiveColors()), isVoid: false };
-        endColorChange(r, c);
-      }
-      return;
-    }
     if (board[r][c] && !board[r][c].isVoid) {
       const oldColor = board[r][c].color;
       const others = getActiveColors().filter(cl => cl !== oldColor);
@@ -785,7 +798,7 @@ function resolveAfterColorChange() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+    if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveColorChangeChain());
@@ -806,7 +819,7 @@ function resolveColorChangeChain() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+    if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveColorChangeChain());
@@ -835,7 +848,7 @@ function resolveAfterAutoChange() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+    if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveAutoChangeChain());
@@ -855,7 +868,7 @@ function resolveAutoChangeChain() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+    if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => resolveAutoChangeChain());
@@ -960,7 +973,9 @@ function animateSkillChange(targets, callback) {
 }
 
 function executeSkill(skillId, r, c, placedColor, callback) {
-  showPopup(SKILL_DEFS.find(s => s.id === skillId).name + '!', 'level-popup');
+  const skillDef = SKILL_DEFS.find(s => s.id === skillId);
+  if (!skillDef) { callback(); return; }
+  showPopup(skillDef.name + '!', 'level-popup');
 
   switch(skillId) {
     case 's1': { // 올체인지: 모든 타일을 놓은 색으로 변경 (상쇄 전)
@@ -1100,31 +1115,31 @@ function executeSkill(skillId, r, c, placedColor, callback) {
       callback();
       break;
 
-    // h2: 행 제거 (상쇄 먼저 → pendingSkill로 도착)
+    // h2: 행 제거 (스킬 먼저 → 내 공 포함 삭제)
     case 'h2': {
       const targets = [];
       for (let cc = 0; cc < BOARD_SIZE; cc++)
-        if (cc !== c && board[r][cc] && !board[r][cc].isVoid)
+        if (board[r][cc] && !board[r][cc].isVoid)
           targets.push({ r, c: cc });
       animateSkillRemoval(targets, true, callback);
       break;
     }
 
-    // h3: 열 제거 (상쇄 먼저 → pendingSkill로 도착)
+    // h3: 열 제거 (스킬 먼저 → 내 공 포함 삭제)
     case 'h3': {
       const targets = [];
       for (let rr = 0; rr < BOARD_SIZE; rr++)
-        if (rr !== r && board[rr][c] && !board[rr][c].isVoid)
+        if (board[rr][c] && !board[rr][c].isVoid)
           targets.push({ r: rr, c });
       animateSkillRemoval(targets, true, callback);
       break;
     }
 
-    // h4: 십자 제거 (상쇄 먼저 → pendingSkill로 도착)
+    // h4: 십자 제거 (스킬 먼저 → 내 공 포함 삭제)
     case 'h4': {
       const targets = [];
       for (let cc = 0; cc < BOARD_SIZE; cc++)
-        if (cc !== c && board[r][cc] && !board[r][cc].isVoid) targets.push({ r, c: cc });
+        if (board[r][cc] && !board[r][cc].isVoid) targets.push({ r, c: cc });
       for (let rr = 0; rr < BOARD_SIZE; rr++)
         if (rr !== r && board[rr][c] && !board[rr][c].isVoid) targets.push({ r: rr, c });
       animateSkillRemoval(targets, true, callback);
@@ -1224,7 +1239,7 @@ function finishResolve() {
         const clearedList = setToList(cellsToRemove);
         let missionDone = checkMissionComplete(clearedList);
         score += calcScore(cellsToRemove.size, combo, missionDone);
-        if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+        if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
         checkLevelUp();
         animateRemoval(cellsToRemove, clearedList, () => {
           enterColorChangeMode();
@@ -1253,7 +1268,7 @@ function resolveAfterPlace() {
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
-    if (missionDone) { showPopup(`MISSION! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
+    if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, () => {
@@ -1318,12 +1333,13 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
 }
 
 function enterColorChangeMode() {
-  colorChangeMode = true;
-  if (hasTilesOnBoard()) {
-    setStatus('색상 변경! 타일을 클릭하세요');
-  } else {
-    setStatus('빈 칸을 클릭하면 랜덤 타일 생성');
+  if (!hasTilesOnBoard()) {
+    // 보드 클리어 → 색변경 건너뛰고 바로 다음 턴
+    finishResolve();
+    return;
   }
+  colorChangeMode = true;
+  setStatus('색상 변경! 타일을 클릭하세요');
   renderBoard();
 }
 
@@ -1505,7 +1521,7 @@ function showIntro() {
 
 function startGame() {
   currentScreen = 'game';
-  history.pushState({ screen: 'game' }, '');
+  history.pushState({ screen: 'game' }, '', '#game');
   document.getElementById('intro').style.display = 'none';
   document.getElementById('app').style.display = 'flex';
   document.getElementById('game-over').classList.remove('active');
@@ -1516,7 +1532,7 @@ function backToIntro() {
   gameActive = false;
   document.getElementById('game-over').classList.remove('active');
   document.getElementById('app').style.display = 'none';
-  history.pushState({ screen: 'intro' }, '');
+  history.pushState({ screen: 'intro' }, '', '#');
   showIntro();
 }
 
@@ -1533,7 +1549,7 @@ function resetSave() {
 
 function showMissionScreen() {
   currentScreen = 'mission';
-  history.pushState({ screen: 'mission' }, '');
+  history.pushState({ screen: 'mission' }, '', '#mission');
   document.getElementById('mission-screen').classList.add('active');
   renderUnlockList();
 }
@@ -1662,6 +1678,57 @@ function renderUnlockList() {
   el.appendChild(collectSection);
 }
 
+// ===== 개발자 콘솔 테스트 헬퍼 =====
+window.DEV = {
+  // 현재 타일에 스킬 부여: DEV.skill('s1')
+  skill(id) {
+    if (!queue[0]) { console.warn('큐가 비어있음'); return; }
+    const sk = SKILL_DEFS.find(s => s.id === id);
+    if (!sk) { console.warn('존재하지 않는 스킬:', id); return; }
+    queue[0].skill = id;
+    renderAll();
+    console.log(`현재 타일에 [${sk.name}] 스킬 부여됨`);
+  },
+  // 모든 스킬 해금: DEV.unlockAll()
+  unlockAll() {
+    SKILL_DEFS.forEach(s => {
+      if (!saveData.unlockedSkills.includes(s.id)) saveData.unlockedSkills.push(s.id);
+    });
+    saveData.hidden = { zeroScore:true, rowClear:true, colClear:true, crossClear:true };
+    saveSave();
+    console.log('모든 스킬/히든 해금 완료');
+  },
+  // 세이브 데이터 직접 수정: DEV.save({ totalGames: 500 })
+  save(obj) {
+    Object.assign(saveData, obj);
+    saveSave();
+    console.log('세이브 데이터 수정됨:', obj);
+  },
+  // 현재 타일 색상 변경: DEV.color('c3')
+  color(c) {
+    if (!queue[0]) { console.warn('큐가 비어있음'); return; }
+    queue[0].color = c;
+    renderAll();
+    console.log(`현재 타일 색상 → ${c}`);
+  },
+  // 스킬 목록 출력: DEV.list()
+  list() {
+    console.table(SKILL_DEFS.map(s => ({ id: s.id, name: s.name, desc: s.desc })));
+  },
+  // 도움말: DEV.help()
+  help() {
+    console.log(`
+=== Color Place 테스트 헬퍼 ===
+DEV.skill('s1')      - 현재 타일에 스킬 부여
+DEV.color('c3')      - 현재 타일 색상 변경
+DEV.unlockAll()      - 모든 스킬/히든 해금
+DEV.save({key:val})  - 세이브 데이터 수정
+DEV.list()           - 스킬 목록 출력
+DEV.help()           - 이 도움말
+    `);
+  }
+};
+
 // Start at intro
-history.replaceState({ screen: 'intro' }, '');
+history.replaceState({ screen: 'intro' }, '', '#');
 showIntro();

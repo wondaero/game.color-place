@@ -22,14 +22,14 @@
   <div id="intro-stats"></div>
   <div class="intro-buttons">
     <button id="btn-start" onclick="startGame()">게임시작</button>
-    <button id="btn-mission" onclick="showMissionScreen()">미션</button>
+    <button id="btn-mission" onclick="showMissionScreen()">업적</button>
     <button id="btn-exit" onclick="exitGame()">종료</button>
   </div>
   <button id="btn-reset" onclick="resetSave()">데이터 초기화</button>
 </div>
 
 <div id="mission-screen">
-  <h2>해금 현황</h2>
+  <h2>업적</h2>
   <div id="unlock-list"></div>
   <button onclick="closeMissionScreen()">돌아가기</button>
 </div>
@@ -58,13 +58,9 @@
   </div>
 
   <div id="mission-area">
-    <span id="mission-label">MISSION</span>
+    <span id="mission-label">QUEST</span>
     <div id="mission-grid"></div>
     <span id="mission-bonus"></span>
-  </div>
-
-  <div id="status-area">
-    <div id="status" class="hidden">-</div>
   </div>
 
   <div id="board-section">
@@ -73,6 +69,10 @@
       <div id="row-labels"></div>
       <div id="board"></div>
     </div>
+  </div>
+
+  <div id="status-area">
+    <div id="status" class="hidden">-</div>
   </div>
 </div>
 

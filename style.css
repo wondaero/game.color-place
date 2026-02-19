@@ -371,6 +371,7 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   transition: opacity 0.2s;
 }
 #status.hidden { opacity: 0; pointer-events: none; }
+#status.skill-tooltip { background: rgba(251,188,4,0.2); color: #FBBC04; }
 
 /* Board */
 #board-section {
