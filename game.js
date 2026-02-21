@@ -42,9 +42,9 @@ const SKILL_DEFS = [
   { id:'s13', name:'보드전체제거',   weight:25, desc:'보드의 모든 타일 제거' },
   // 히든미션 기반
   { id:'h1',  name:'덮어쓰기',      weight:25, desc:'기존 타일 위에 덮어서 배치 가능' },
-  { id:'h2',  name:'행제거',        weight:25, desc:'놓은 행 전체 제거 (상쇄 먼저)' },
-  { id:'h3',  name:'열제거',        weight:25, desc:'놓은 열 전체 제거 (상쇄 먼저)' },
-  { id:'h4',  name:'십자제거',      weight:25, desc:'놓은 행+열 십자 제거 (상쇄 먼저)' },
+  { id:'h2',  name:'행제거',        weight:25, desc:'놓은 행 전체 제거' },
+  { id:'h3',  name:'열제거',        weight:25, desc:'놓은 열 전체 제거' },
+  { id:'h4',  name:'십자제거',      weight:25, desc:'놓은 행+열 십자 제거' },
 ];
 // weight 25 out of 10000 = 0.25%
 // Skills that do matching FIRST, then remove/change (상쇄 먼저)
@@ -173,6 +173,9 @@ let sessionCrossCleared = false;
 let sessionColorCount = { c5: 0, c6: 0, c7: 0 };
 let missionStreak = 0; // consecutive mission successes
 let pendingSkill = null; // { skillId, r, c, color } for match-first skills
+let lastPlacedR = -1;
+let lastPlacedC = -1;
+let lastPlacedColor = null;
 
 // ============================================================
 // UTILITY
@@ -202,20 +205,6 @@ function cellOccupied(r, c) { return board[r][c] !== null; }
 function cellPlayable(r, c) { return board[r][c] === null; }
 function cellPlayableOrOccupied(r, c) { return board[r][c] === null || (board[r][c] && !board[r][c].isVoid); }
 
-function getAvailableLines() {
-  const lines = [];
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    let empty = 0;
-    for (let c = 0; c < BOARD_SIZE; c++) if (!cellOccupied(r, c)) empty++;
-    if (empty > 0) lines.push({ dir: 'row', num: r + 1 });
-  }
-  for (let c = 0; c < BOARD_SIZE; c++) {
-    let empty = 0;
-    for (let r = 0; r < BOARD_SIZE; r++) if (!cellOccupied(r, c)) empty++;
-    if (empty > 0) lines.push({ dir: 'col', num: c + 1 });
-  }
-  return lines;
-}
 
 function hasAnyEmptyCell() {
   for (let r = 0; r < BOARD_SIZE; r++)
@@ -265,19 +254,23 @@ function generateTile(useBoard) {
     return { type, color, dir: null, num: null, skill };
   }
 
-  // Types 3,4: single line
+  // Types 3,4: row+col (가로세로공) - 같은 번호의 행과 열 모두 배치 가능
   if (type === 3 || type === 4) {
-    let dir, num;
     if (useBoard) {
-      const lines = getAvailableLines();
-      if (lines.length === 0) return null;
-      const pick = rand(lines);
-      dir = pick.dir; num = pick.num;
+      const validNums = [];
+      for (let n = 1; n <= BOARD_SIZE; n++) {
+        const idx = n - 1;
+        let hasEmpty = false;
+        for (let i = 0; i < BOARD_SIZE; i++) {
+          if (!cellOccupied(idx, i) || !cellOccupied(i, idx)) { hasEmpty = true; break; }
+        }
+        if (hasEmpty) validNums.push(n);
+      }
+      if (validNums.length === 0) return null;
+      return { type, color, dir: 'rowcol', num: rand(validNums), skill };
     } else {
-      dir = rand(['row', 'col']);
-      num = randInt(1, BOARD_SIZE);
+      return { type, color, dir: 'rowcol', num: randInt(1, BOARD_SIZE), skill };
     }
-    return { type, color, dir, num, skill };
   }
 
   // Types 5,6: cross (row+col with same num)
@@ -316,14 +309,21 @@ function getValidCells(tile) {
     return cells;
   }
 
-  // Type 3,4: single line
+  // Type 3,4: rowcol (가로세로공) - 같은 번호의 행과 열 모두
   if (tile.type === 3 || tile.type === 4) {
-    if (tile.dir === 'row') {
-      const r = tile.num - 1;
-      for (let c = 0; c < BOARD_SIZE; c++) if (check(r, c)) cells.push({ r, c });
-    } else {
-      const c = tile.num - 1;
-      for (let r = 0; r < BOARD_SIZE; r++) if (check(r, c)) cells.push({ r, c });
+    const n = tile.num - 1;
+    const added = new Set();
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (check(n, c) && !added.has(`${n},${c}`)) {
+        cells.push({ r: n, c });
+        added.add(`${n},${c}`);
+      }
+    }
+    for (let r = 0; r < BOARD_SIZE; r++) {
+      if (check(r, n) && !added.has(`${r},${n}`)) {
+        cells.push({ r, c: n });
+        added.add(`${r},${n}`);
+      }
     }
     return cells;
   }
@@ -528,7 +528,10 @@ function renderBoard() {
         tile.className = `tile color-${data.color}`;
         if (data.isVoid) tile.classList.add('void-tile');
         cell.appendChild(tile);
-        if (colorChangeMode && !data.isVoid) cell.classList.add('change-target');
+        if (colorChangeMode && !data.isVoid) {
+          const neighbors = getOccupiedNeighbors(lastPlacedR, lastPlacedC);
+          if (neighbors.some(n => n.r === r && n.c === c)) cell.classList.add('change-target');
+        }
       }
       if (validCells.some(v => v.r === r && v.c === c)) cell.classList.add('highlight');
       // Skill select mode: highlight candidates with special style
@@ -554,9 +557,12 @@ function renderQueue() {
 
     // Lines based on type
     if (t.type === 3 || t.type === 4) {
-      const line = document.createElement('div');
-      line.className = `tile-line ${t.dir === 'row' ? 'horizontal' : 'vertical'}`;
-      preview.appendChild(line);
+      const lineH = document.createElement('div');
+      lineH.className = 'tile-line horizontal';
+      preview.appendChild(lineH);
+      const lineV = document.createElement('div');
+      lineV.className = 'tile-line vertical';
+      preview.appendChild(lineV);
     }
     // Number (only for types with position)
     if (t.num !== null) {
@@ -713,12 +719,11 @@ function onCellClick(r, c) {
     return;
   }
 
-  // --- COLOR CHANGE ---
+  // --- COLOR CHANGE (주변 1개를 놓은 공 색상으로 변경) ---
   if (colorChangeMode) {
-    if (board[r][c] && !board[r][c].isVoid) {
-      const oldColor = board[r][c].color;
-      const others = getActiveColors().filter(cl => cl !== oldColor);
-      board[r][c] = { color: rand(others), isVoid: false };
+    const neighbors = getOccupiedNeighbors(lastPlacedR, lastPlacedC);
+    if (board[r][c] && !board[r][c].isVoid && neighbors.some(n => n.r === r && n.c === c)) {
+      board[r][c] = { color: lastPlacedColor, isVoid: false };
       endColorChange(r, c);
     }
     return;
@@ -733,6 +738,9 @@ function onCellClick(r, c) {
   // Determine color: if colorless, random
   const placedColor = tile.color || rand(getActiveColors());
   board[r][c] = { color: placedColor, isVoid: false };
+  lastPlacedR = r;
+  lastPlacedC = c;
+  lastPlacedColor = placedColor;
   turnCount++;
   missionTurnCounter++;
 
@@ -1334,12 +1342,17 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
 
 function enterColorChangeMode() {
   if (!hasTilesOnBoard()) {
-    // 보드 클리어 → 색변경 건너뛰고 바로 다음 턴
     finishResolve();
     return;
   }
+  const neighbors = getOccupiedNeighbors(lastPlacedR, lastPlacedC);
+  if (neighbors.length === 0) {
+    // 주변에 변경할 타일 없음 → 건너뛰기
+    proceedToAutoChange();
+    return;
+  }
   colorChangeMode = true;
-  setStatus('색상 변경! 타일을 클릭하세요');
+  setStatus('주변 타일을 선택하여 색상 변경!');
   renderBoard();
 }
 
