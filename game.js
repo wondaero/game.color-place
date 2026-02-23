@@ -161,6 +161,26 @@ const LEVELS_FREE = [
   { minScore: 5000, colors: 7, label: '어둠이 찾아왔다!', autoChange: true, voidBlocks: true, darkBoard: true },
 ];
 
+// Checker mode levels (game 4)
+const LEVELS_CHECKER = [
+  { minScore: 0,    colors: 4, label: '' },
+  { minScore: 500,  colors: 5, label: '색상 추가!' },
+  { minScore: 1000, colors: 6, label: '색상 추가!' },
+  { minScore: 1500, colors: 7, label: '색상 추가!' },
+  { minScore: 2000, colors: 7, label: '자동 색변경!', autoChange: true },
+  { minScore: 3000, colors: 7, label: '무효블록 생성!', autoChange: true, voidBlocks: true },
+];
+
+// Checker patterns: A = (r+c) 홀수, B = (r+c) 짝수
+function getCheckerCells(pattern) {
+  const cells = [];
+  for (let r = 0; r < BOARD_SIZE; r++)
+    for (let c = 0; c < BOARD_SIZE; c++)
+      if (pattern === 'A' ? (r + c) % 2 === 1 : (r + c) % 2 === 0)
+        cells.push({ r, c });
+  return cells;
+}
+
 // Mission shapes
 const MISSION_SHAPES = [
   { id:'h3', cells:[[0,0],[0,1],[0,2]], bonus:30 },
@@ -215,7 +235,7 @@ function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
 function getLevel() {
-  const levels = gameMode === 'free' ? LEVELS_FREE : LEVELS;
+  const levels = gameMode === 'free' ? LEVELS_FREE : gameMode === 'checker' ? LEVELS_CHECKER : LEVELS;
   let lv = levels[0];
   for (const l of levels) if (score >= l.minScore) lv = l;
   return lv;
@@ -288,6 +308,22 @@ function generateTile(useBoard) {
     return { type: freeType, color, dir: null, num: null, skill };
   }
 
+  // Checker mode: random A or B pattern
+  if (gameMode === 'checker') {
+    const pattern = Math.random() < 0.5 ? 'A' : 'B';
+    if (useBoard) {
+      const available = getCheckerCells(pattern).filter(({ r, c }) => cellPlayable(r, c));
+      if (available.length === 0) {
+        // 해당 패턴이 꽉 찼으면 반대 패턴 시도
+        const alt = pattern === 'A' ? 'B' : 'A';
+        const altAvail = getCheckerCells(alt).filter(({ r, c }) => cellPlayable(r, c));
+        if (altAvail.length === 0) return null;
+        return { type: hasColor ? 1 : 2, color, dir: 'checker', num: null, pattern: alt, skill };
+      }
+    }
+    return { type: hasColor ? 1 : 2, color, dir: 'checker', num: null, pattern, skill };
+  }
+
   // Types 3,4: zone mode or row+col (가로세로공)
   if (type === 3 || type === 4) {
     if (gameMode === 'zone') {
@@ -347,6 +383,12 @@ function getValidCells(tile) {
 
   // Type 1,2: all empty cells (or overwrite)
   if (tile.type === 1 || tile.type === 2) {
+    // Checker mode: restrict to pattern cells
+    if (tile.dir === 'checker') {
+      for (const { r, c } of getCheckerCells(tile.pattern))
+        if (check(r, c)) cells.push({ r, c });
+      return cells;
+    }
     for (let r = 0; r < BOARD_SIZE; r++)
       for (let c = 0; c < BOARD_SIZE; c++)
         if (check(r, c)) cells.push({ r, c });
@@ -406,13 +448,14 @@ function getValidCells(tile) {
 // ICE BLOCKS
 // ============================================================
 function spawnVoidBlock() {
-  const emptyCells = [];
+  // 기존 공에 얼음 부여 (빈 칸에 새 공 생성 X)
+  const candidates = [];
   for (let r = 0; r < BOARD_SIZE; r++)
     for (let c = 0; c < BOARD_SIZE; c++)
-      if (!board[r][c]) emptyCells.push({ r, c });
-  if (emptyCells.length === 0) return;
-  const pos = rand(emptyCells);
-  board[pos.r][pos.c] = { color: rand(getActiveColors()), isVoid: true };
+      if (board[r][c] && !board[r][c].isVoid) candidates.push({ r, c });
+  if (candidates.length === 0) return;
+  const pos = rand(candidates);
+  board[pos.r][pos.c].isVoid = true;
 }
 
 function crackAdjacentVoids(clearedCells, iceToConvert) {
@@ -591,8 +634,14 @@ function renderBoard() {
           tile.className = 'tile dark-hidden';
         } else {
           tile.className = `tile color-${data.color}`;
-          if (data.isVoid) tile.classList.add('void-tile');
           if (isFlash) tile.classList.add('dark-flash');
+          if (data.isVoid) {
+            cell.classList.add('ice-cell');
+            const badge = document.createElement('div');
+            badge.className = 'ice-badge';
+            badge.textContent = '*';
+            tile.appendChild(badge);
+          }
         }
         cell.appendChild(tile);
         if (colorChangeMode && !data.isVoid) {
@@ -623,7 +672,13 @@ function renderQueue() {
     preview.className = `tile-preview ${hasColor ? 'color-' + t.color : 'color-unknown'}`;
 
     // Lines / zone name based on type
-    if (t.dir === 'zone') {
+    if (t.dir === 'checker') {
+      const zn = document.createElement('div');
+      zn.className = 'tile-zone-name';
+      zn.textContent = t.pattern;
+      if (!hasColor) zn.style.color = '#888';
+      preview.appendChild(zn);
+    } else if (t.dir === 'zone') {
       const zn = document.createElement('div');
       zn.className = 'tile-zone-name';
       zn.textContent = ZONE_NAMES[t.zone] || '';
@@ -689,7 +744,7 @@ function renderLabels() {
   const rowL = document.getElementById('row-labels');
   const colL = document.getElementById('col-labels');
   rowL.innerHTML = ''; colL.innerHTML = '';
-  if (gameMode === 'zone' || gameMode === 'free') return;
+  if (gameMode === 'zone' || gameMode === 'free' || gameMode === 'checker') return;
   for (let i = 1; i <= BOARD_SIZE; i++) {
     let d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; rowL.appendChild(d);
     d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; colL.appendChild(d);
@@ -856,7 +911,7 @@ function onCellClick(r, c) {
         darkRevealCells.clear();
         renderBoard();
       }
-    }, 500);
+    }, 200);
   }
 
   // Void block spawning
@@ -1016,6 +1071,13 @@ function doAutoColorChange(callback) {
   const others = getActiveColors().filter(cl => cl !== oldColor);
   board[pick.r][pick.c] = { color: rand(others), isVoid: false };
 
+  if (darkMode) {
+    darkRevealCells.clear();
+    darkRevealCells.add(`${pick.r},${pick.c}`);
+    for (const n of getNeighbors(pick.r, pick.c))
+      if (board[n.r]?.[n.c]) darkRevealCells.add(`${n.r},${n.c}`);
+  }
+
   setStatus('자동 색상 변경!');
   renderAll();
   const idx = pick.r * BOARD_SIZE + pick.c;
@@ -1025,6 +1087,7 @@ function doAutoColorChange(callback) {
   inputLocked = true;
   setTimeout(() => {
     inputLocked = false;
+    if (darkMode) { darkRevealCells.clear(); renderBoard(); }
     setStatus(null);
     callback();
   }, 600);
@@ -1371,6 +1434,7 @@ function finishResolve() {
         if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
         checkLevelUp();
         animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => {
+          if (darkMode) { darkRevealAll = false; darkRevealCells.clear(); renderBoard(); }
           enterColorChangeMode();
         });
       } else {
@@ -1407,6 +1471,7 @@ function resolveAfterPlace() {
     checkLevelUp();
 
     animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => {
+      if (darkMode) { darkRevealAll = false; darkRevealCells.clear(); renderBoard(); }
       enterColorChangeMode();
     });
   } else {
@@ -1445,12 +1510,12 @@ function animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, callback)
       board[rr][cc] = null;
     }
 
-    // Adjacent ice cells (different color) shatter and disappear
+    // Adjacent ice cells → 얼음만 제거, 공은 그대로
     for (const { r, c } of cracked) {
-      board[r][c] = null;
+      if (board[r][c]) board[r][c] = { color: board[r][c].color, isVoid: false };
     }
 
-    // In-group ice cells of same color convert to normal tiles
+    // In-group ice cells → 얼음만 제거, 공은 그대로
     for (const key of iceCellsToConvert) {
       const [rr, cc] = key.split(',').map(Number);
       if (board[rr][cc] && board[rr][cc].isVoid) {

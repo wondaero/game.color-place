@@ -505,25 +505,22 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   100% { filter: grayscale(90%) brightness(0.45); }
 }
 
-/* Ice tile */
-.cell .tile.void-tile {
-  border-radius: 50%;
-  position: relative;
-  overflow: hidden;
-  filter: saturate(45%) brightness(1.15);
+/* Ice cell */
+.cell.ice-cell {
+  background: rgba(180, 225, 255, 0.35);
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 1.5px rgba(140, 200, 255, 0.6);
 }
-.cell .tile.void-tile::after {
-  content: '❄';
+.ice-badge {
   position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.9);
-  text-shadow: 0 0 6px rgba(150, 210, 255, 1);
-  background: rgba(180, 225, 255, 0.28);
-  border-radius: 50%;
+  top: 1px;
+  right: 3px;
+  font-size: 10px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 0 4px rgba(100, 180, 255, 1);
+  line-height: 1;
+  pointer-events: none;
 }
 
 @keyframes popAnim {
