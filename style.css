@@ -100,6 +100,11 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   background: #e94560;
   color: #fff;
 }
+#btn-start2 {
+  background: #0f3460;
+  color: #fff;
+  border: 2px solid #1a6ca8;
+}
 #btn-mission {
   background: #16213e;
   color: #FBBC04;
@@ -272,6 +277,15 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
   font-weight: bold;
   text-shadow: none;
   line-height: 1;
+}
+.queue-slot .tile-preview .tile-zone-name {
+  position: relative;
+  z-index: 2;
+  font-size: 15px;
+  font-weight: bold;
+  line-height: 1;
+  color: rgba(255,255,255,0.9);
+  text-shadow: 0 1px 2px rgba(0,0,0,0.4);
 }
 .queue-slot .tile-preview .skill-badge {
   position: absolute;
@@ -462,6 +476,29 @@ h1 { font-size: 22px; color: #fff; letter-spacing: 2px; }
 .cell .tile.color-swap { animation: swapAnim 0.5s ease-out; }
 .cell .tile.skill-remove { animation: skillRemoveAnim 0.5s ease-out forwards; }
 .cell .tile.skill-change { animation: skillChangeAnim 0.5s ease-out; }
+
+/* Dark board mode */
+.cell .tile.dark-hidden {
+  background: #2a2a40;
+  background-image: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.06) 0%, transparent 50%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.5), inset 0 1px 1px rgba(255,255,255,0.04);
+}
+.cell .tile.dark-flash {
+  animation: darkFlashAnim 0.5s ease-out;
+}
+@keyframes darkFlashAnim {
+  0%   { box-shadow: 0 0 0 3px rgba(255,255,255,0.9), 0 0 16px 4px rgba(255,255,255,0.6); }
+  40%  { box-shadow: 0 0 0 2px rgba(255,255,255,0.5), 0 0 10px 2px rgba(255,255,255,0.3); }
+  100% { box-shadow: 0 2px 6px rgba(0,0,0,0.3), inset 0 1px 2px rgba(255,255,255,0.25); }
+}
+/* 5초 미리보기 → 페이드 아웃 */
+#board.board-fading {
+  animation: boardFadeDark 1.5s ease-in forwards;
+}
+@keyframes boardFadeDark {
+  0%   { filter: grayscale(0%) brightness(1); }
+  100% { filter: grayscale(90%) brightness(0.45); }
+}
 
 /* Void tile */
 .cell .tile.void-tile {

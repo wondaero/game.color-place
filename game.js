@@ -12,6 +12,17 @@ const COLOR_HEX = {c1:'#D32F2F',c2:'#6D4C41',c3:'#FBC02D',c4:'#388E3C',c5:'#1565
 })();
 const BOARD_SIZE = 5;
 
+// Zone patterns for zone mode (each is list of [r,c] valid cells)
+const ZONE_PATTERNS = {
+  'sq':   [[0,0],[0,1],[0,2],[0,3],[0,4],[1,0],[1,4],[2,0],[2,4],[3,0],[3,4],[4,0],[4,1],[4,2],[4,3],[4,4]],
+  'hash': [[0,0],[0,2],[0,4],[2,0],[2,2],[2,4],[4,0],[4,2],[4,4]],
+  'plus': [[0,2],[1,2],[2,0],[2,1],[2,2],[2,3],[2,4],[3,2],[4,2]],
+  'x':    [[0,0],[0,4],[1,1],[1,3],[2,2],[3,1],[3,3],[4,0],[4,4]],
+  'dia':  [[0,2],[1,1],[1,3],[2,0],[2,4],[3,1],[3,3],[4,2]],
+};
+const ZONE_NAMES = { 'sq':'ㅁ', 'hash':'#', 'plus':'+', 'x':'X', 'dia':'◇' };
+const ZONE_KEYS = ['sq', 'hash', 'plus', 'x', 'dia'];
+
 // Tile types & unlock thresholds (games played)
 // type 3 always available, rest unlock at milestones
 const ALL_TILE_TYPES = [
@@ -137,6 +148,7 @@ const LEVELS = [
   { minScore: 1500, colors: 6, label: '자동 색변경!', autoChange: true },
   { minScore: 2000, colors: 7, label: '색상 추가!', autoChange: true },
   { minScore: 2500, colors: 7, label: '무효블록 생성!', autoChange: true, voidBlocks: true },
+  { minScore: 3000, colors: 7, label: '어둠이 찾아왔다!', autoChange: true, voidBlocks: true, darkBoard: true },
 ];
 
 // Mission shapes
@@ -152,6 +164,15 @@ const MISSION_SHAPES = [
 // ============================================================
 // STATE
 // ============================================================
+let gameMode = 'classic'; // 'classic' | 'zone'
+
+// Dark board mode (3000pts+)
+let darkMode = false;
+let darkRevealAll = false;      // true = 전체 공개 (상쇄 중)
+let darkRevealCells = new Set(); // 번쩍 공개 중인 셀 키 ("r,c")
+let darkRevealTimer = null;     // 이웃 번쩍 타이머
+let darkPreviewActive = false;  // true = 5초 미리보기 중
+
 let board = [];       // null | { color, isVoid }
 let queue = [];       // { type, color(or null), dir(or null), num(or null) }
 let score = 0;
@@ -254,8 +275,18 @@ function generateTile(useBoard) {
     return { type, color, dir: null, num: null, skill };
   }
 
-  // Types 3,4: row+col (가로세로공) - 같은 번호의 행과 열 모두 배치 가능
+  // Types 3,4: zone mode or row+col (가로세로공)
   if (type === 3 || type === 4) {
+    if (gameMode === 'zone') {
+      if (useBoard) {
+        const validZones = ZONE_KEYS.filter(zk => ZONE_PATTERNS[zk].some(([r, c]) => cellPlayable(r, c)));
+        if (validZones.length === 0) return null;
+        return { type, color, dir: 'zone', num: null, zone: rand(validZones), skill };
+      } else {
+        return { type, color, dir: 'zone', num: null, zone: rand(ZONE_KEYS), skill };
+      }
+    }
+    // classic: row+col
     if (useBoard) {
       const validNums = [];
       for (let n = 1; n <= BOARD_SIZE; n++) {
@@ -309,8 +340,16 @@ function getValidCells(tile) {
     return cells;
   }
 
-  // Type 3,4: rowcol (가로세로공) - 같은 번호의 행과 열 모두
+  // Type 3,4: zone or rowcol
   if (tile.type === 3 || tile.type === 4) {
+    if (tile.dir === 'zone') {
+      const pattern = ZONE_PATTERNS[tile.zone] || [];
+      for (const [r, c] of pattern) {
+        if (check(r, c)) cells.push({ r, c });
+      }
+      return cells;
+    }
+    // classic rowcol
     const n = tile.num - 1;
     const added = new Set();
     for (let c = 0; c < BOARD_SIZE; c++) {
@@ -525,8 +564,16 @@ function renderBoard() {
       const data = board[r][c];
       if (data) {
         const tile = document.createElement('div');
-        tile.className = `tile color-${data.color}`;
-        if (data.isVoid) tile.classList.add('void-tile');
+        const cellKey = `${r},${c}`;
+        const isFlash = darkMode && !darkRevealAll && !data.isVoid && darkRevealCells.has(cellKey);
+        const isHidden = darkMode && !darkRevealAll && !data.isVoid && !darkRevealCells.has(cellKey);
+        if (isHidden) {
+          tile.className = 'tile dark-hidden';
+        } else {
+          tile.className = `tile color-${data.color}`;
+          if (data.isVoid) tile.classList.add('void-tile');
+          if (isFlash) tile.classList.add('dark-flash');
+        }
         cell.appendChild(tile);
         if (colorChangeMode && !data.isVoid) {
           const neighbors = getOccupiedNeighbors(lastPlacedR, lastPlacedC);
@@ -555,8 +602,14 @@ function renderQueue() {
     const hasColor = (t.color !== null);
     preview.className = `tile-preview ${hasColor ? 'color-' + t.color : 'color-unknown'}`;
 
-    // Lines based on type
-    if (t.type === 3 || t.type === 4) {
+    // Lines / zone name based on type
+    if (t.dir === 'zone') {
+      const zn = document.createElement('div');
+      zn.className = 'tile-zone-name';
+      zn.textContent = ZONE_NAMES[t.zone] || '';
+      if (!hasColor) zn.style.color = '#888';
+      preview.appendChild(zn);
+    } else if (t.type === 3 || t.type === 4) {
       const lineH = document.createElement('div');
       lineH.className = 'tile-line horizontal';
       preview.appendChild(lineH);
@@ -564,8 +617,8 @@ function renderQueue() {
       lineV.className = 'tile-line vertical';
       preview.appendChild(lineV);
     }
-    // Number (only for types with position)
-    if (t.num !== null) {
+    // Number (only for types with position, not zone)
+    if (t.num !== null && t.dir !== 'zone') {
       const num = document.createElement('div');
       num.className = 'tile-num';
       num.textContent = t.num;
@@ -616,16 +669,23 @@ function renderLabels() {
   const rowL = document.getElementById('row-labels');
   const colL = document.getElementById('col-labels');
   rowL.innerHTML = ''; colL.innerHTML = '';
+  if (gameMode === 'zone') return;
   for (let i = 1; i <= BOARD_SIZE; i++) {
     let d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; rowL.appendChild(d);
     d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; colL.appendChild(d);
   }
 }
 
-function setStatus(text) {
+function setStatus(text, color) {
   const el = document.getElementById('status');
-  if (text) { el.textContent = text; el.classList.remove('hidden'); }
-  else { el.classList.add('hidden'); }
+  if (text) {
+    el.textContent = text;
+    el.classList.remove('hidden');
+    el.style.color = color || '';
+  } else {
+    el.classList.add('hidden');
+    el.style.color = '';
+  }
 }
 
 function updateComboDisplay() {
@@ -690,6 +750,23 @@ function checkLevelUp() {
       voidTurnCounter = 0;
       spawnVoidBlock();
     }
+    if (newLevel.darkBoard && !darkMode) {
+      darkMode = true;
+      darkRevealAll = true;
+      darkPreviewActive = true;
+      renderBoard();
+      // 3.5초 후 페이드 아웃 시작
+      setTimeout(() => {
+        document.getElementById('board').classList.add('board-fading');
+      }, 3500);
+      // 5초 후 완전히 어두워짐
+      setTimeout(() => {
+        document.getElementById('board').classList.remove('board-fading');
+        darkRevealAll = false;
+        darkPreviewActive = false;
+        renderBoard();
+      }, 5000);
+    }
   }
   prevLevel = newLevel;
 }
@@ -698,7 +775,7 @@ function checkLevelUp() {
 // GAME LOGIC
 // ============================================================
 function onCellClick(r, c) {
-  if (!gameActive || inputLocked) return;
+  if (!gameActive || inputLocked || darkPreviewActive) return;
 
   // --- SKILL SELECT MODE ---
   if (skillSelectMode) {
@@ -743,6 +820,24 @@ function onCellClick(r, c) {
   lastPlacedColor = placedColor;
   turnCount++;
   missionTurnCounter++;
+
+  // Dark mode: 배치한 공 + 주변 8칸 번쩍 공개
+  if (darkMode && !darkRevealAll) {
+    clearTimeout(darkRevealTimer);
+    darkRevealCells.clear();
+    darkRevealCells.add(`${r},${c}`);
+    for (const n of getNeighbors(r, c)) {
+      if (board[n.r]?.[n.c] && !board[n.r][n.c].isVoid) {
+        darkRevealCells.add(`${n.r},${n.c}`);
+      }
+    }
+    darkRevealTimer = setTimeout(() => {
+      if (!darkRevealAll) {
+        darkRevealCells.clear();
+        renderBoard();
+      }
+    }, 500);
+  }
 
   // Void block spawning
   const lv = getLevel();
@@ -1237,6 +1332,7 @@ function finishResolve() {
   if (pendingSkill) {
     const ps = pendingSkill;
     pendingSkill = null;
+    if (darkMode) darkRevealAll = true; // 스킬 효과 보이게
     executeSkill(ps.skillId, ps.r, ps.c, ps.color, () => {
       // After skill removal, check for new matches
       const matches = findMatches();
@@ -1253,6 +1349,7 @@ function finishResolve() {
           enterColorChangeMode();
         });
       } else {
+        if (darkMode) darkRevealAll = false;
         maybeNewMission();
         renderAll();
         checkGameOver();
@@ -1260,6 +1357,7 @@ function finishResolve() {
     });
     return;
   }
+  if (darkMode) darkRevealAll = false; // 모든 체인 끝 → 다시 어둠
   maybeNewMission();
   renderAll();
   checkGameOver();
@@ -1271,6 +1369,9 @@ function resolveAfterPlace() {
     combo++;
     if (combo > maxCombo) maxCombo = combo;
     if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
+
+    // Dark mode: 상쇄 시 보드 전체 공개
+    if (darkMode) { clearTimeout(darkRevealTimer); darkRevealAll = true; darkRevealCells.clear(); }
 
     const cellsToRemove = collectCells(matches);
     const clearedList = setToList(cellsToRemove);
@@ -1352,7 +1453,7 @@ function enterColorChangeMode() {
     return;
   }
   colorChangeMode = true;
-  setStatus('주변 타일을 선택하여 색상 변경!');
+  setStatus('● 주변 타일을 선택하여 색상 변경!', COLOR_HEX[lastPlacedColor]);
   renderBoard();
 }
 
@@ -1498,6 +1599,12 @@ function initGame() {
   popupQueue = [];
   popupRunning = false;
   saveData = loadSave();
+  darkMode = false;
+  darkRevealAll = false;
+  darkRevealCells = new Set();
+  clearTimeout(darkRevealTimer);
+  darkRevealTimer = null;
+  darkPreviewActive = false;
 
   document.getElementById('game-over').classList.remove('active');
   setStatus(null);
@@ -1532,7 +1639,8 @@ function showIntro() {
   stEl.textContent = saveData.totalGames > 0 ? `${saveData.totalGames}판 플레이` : '';
 }
 
-function startGame() {
+function startGame(mode) {
+  if (mode !== undefined) gameMode = mode;
   currentScreen = 'game';
   history.pushState({ screen: 'game' }, '', '#game');
   document.getElementById('intro').style.display = 'none';
