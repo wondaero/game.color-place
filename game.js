@@ -3,7 +3,7 @@
 // ============================================================
 const ALL_COLORS = ['c1','c2','c3','c4','c5','c6','c7'];
 const COLOR_KR = {c1:'1',c2:'2',c3:'3',c4:'4',c5:'5',c6:'6',c7:'7'};
-const COLOR_HEX = {c1:'#D32F2F',c2:'#6D4C41',c3:'#FBC02D',c4:'#388E3C',c5:'#1565C0',c6:'#7B1FA2',c7:'#00ACC1'};
+const COLOR_HEX = {c1:'#D32F2F',c2:'#6D4C41',c3:'#FDD835',c4:'#388E3C',c5:'#0097A7',c6:'#1565C0',c7:'#6A1B9A'};
 
 // Apply CSS variables
 (function() {
@@ -151,6 +151,16 @@ const LEVELS = [
   { minScore: 3000, colors: 7, label: '어둠이 찾아왔다!', autoChange: true, voidBlocks: true, darkBoard: true },
 ];
 
+// Free mode levels (game 3)
+const LEVELS_FREE = [
+  { minScore: 0,    colors: 5, label: '' },
+  { minScore: 1000, colors: 6, label: '색상 추가!' },
+  { minScore: 1500, colors: 7, label: '색상 추가!' },
+  { minScore: 2000, colors: 7, label: '자동 색변경!', autoChange: true },
+  { minScore: 3000, colors: 7, label: '얼음 시작!', autoChange: true, voidBlocks: true },
+  { minScore: 5000, colors: 7, label: '어둠이 찾아왔다!', autoChange: true, voidBlocks: true, darkBoard: true },
+];
+
 // Mission shapes
 const MISSION_SHAPES = [
   { id:'h3', cells:[[0,0],[0,1],[0,2]], bonus:30 },
@@ -205,8 +215,9 @@ function rand(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 function randInt(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }
 
 function getLevel() {
-  let lv = LEVELS[0];
-  for (const l of LEVELS) if (score >= l.minScore) lv = l;
+  const levels = gameMode === 'free' ? LEVELS_FREE : LEVELS;
+  let lv = levels[0];
+  for (const l of levels) if (score >= l.minScore) lv = l;
   return lv;
 }
 
@@ -270,9 +281,11 @@ function generateTile(useBoard) {
   const skill = pickSkill();
 
   // Types 1,2: free placement - no dir/num
-  if (type === 1 || type === 2) {
+  // Free mode: all tiles become free placement
+  if (type === 1 || type === 2 || gameMode === 'free') {
     if (useBoard && !hasAnyEmptyCell()) return null;
-    return { type, color, dir: null, num: null, skill };
+    const freeType = hasColor ? 1 : 2;
+    return { type: freeType, color, dir: null, num: null, skill };
   }
 
   // Types 3,4: zone mode or row+col (가로세로공)
@@ -390,7 +403,7 @@ function getValidCells(tile) {
 }
 
 // ============================================================
-// VOID BLOCKS
+// ICE BLOCKS
 // ============================================================
 function spawnVoidBlock() {
   const emptyCells = [];
@@ -402,7 +415,7 @@ function spawnVoidBlock() {
   board[pos.r][pos.c] = { color: rand(getActiveColors()), isVoid: true };
 }
 
-function crackAdjacentVoids(clearedCells) {
+function crackAdjacentVoids(clearedCells, iceToConvert) {
   const dirs = [[0,1],[0,-1],[1,0],[-1,0]];
   const cracked = [];
   const clearedSet = new Set(clearedCells.map(c => `${c.r},${c.c}`));
@@ -411,13 +424,10 @@ function crackAdjacentVoids(clearedCells) {
       const nr = r + dr, nc = c + dc;
       if (nr < 0 || nr >= BOARD_SIZE || nc < 0 || nc >= BOARD_SIZE) continue;
       const cell = board[nr][nc];
-      if (cell && cell.isVoid && !clearedSet.has(`${nr},${nc}`)) {
+      if (cell && cell.isVoid && !clearedSet.has(`${nr},${nc}`) && !iceToConvert.has(`${nr},${nc}`)) {
         cracked.push({ r: nr, c: nc });
       }
     }
-  }
-  for (const { r, c } of cracked) {
-    board[r][c] = { color: board[r][c].color, isVoid: false };
   }
   return cracked;
 }
@@ -482,7 +492,7 @@ function findMatches() {
         for (const [dr, dc] of dirs) {
           const nr = cur.r + dr, nc = cur.c + dc;
           if (nr >= 0 && nr < BOARD_SIZE && nc >= 0 && nc < BOARD_SIZE
-              && !visited[nr][nc] && board[nr][nc] && !board[nr][nc].isVoid
+              && !visited[nr][nc] && board[nr][nc]
               && board[nr][nc].color === color) {
             visited[nr][nc] = true;
             stack.push({ r: nr, c: nc });
@@ -497,7 +507,17 @@ function findMatches() {
 
 function collectCells(matches) {
   const set = new Set();
-  for (const g of matches) for (const c of g.cells) set.add(`${c.r},${c.c}`);
+  for (const g of matches)
+    for (const c of g.cells)
+      if (!board[c.r][c.c].isVoid) set.add(`${c.r},${c.c}`);
+  return set;
+}
+
+function collectIceCells(matches) {
+  const set = new Set();
+  for (const g of matches)
+    for (const c of g.cells)
+      if (board[c.r][c.c] && board[c.r][c.c].isVoid) set.add(`${c.r},${c.c}`);
   return set;
 }
 
@@ -669,7 +689,7 @@ function renderLabels() {
   const rowL = document.getElementById('row-labels');
   const colL = document.getElementById('col-labels');
   rowL.innerHTML = ''; colL.innerHTML = '';
-  if (gameMode === 'zone') return;
+  if (gameMode === 'zone' || gameMode === 'free') return;
   for (let i = 1; i <= BOARD_SIZE; i++) {
     let d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; rowL.appendChild(d);
     d = document.createElement('div'); d.className = 'lbl'; d.textContent = i; colL.appendChild(d);
@@ -898,13 +918,14 @@ function resolveAfterColorChange() {
     if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
+    const iceCellsToConvert = collectIceCells(matches);
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
-    animateRemoval(cellsToRemove, clearedList, () => resolveColorChangeChain());
+    animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => resolveColorChangeChain());
   } else {
     // 내 색변경 상쇄 끝 → 자동 색변경으로
     proceedToAutoChange();
@@ -919,13 +940,14 @@ function resolveColorChangeChain() {
     if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
+    const iceCellsToConvert = collectIceCells(matches);
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
-    animateRemoval(cellsToRemove, clearedList, () => resolveColorChangeChain());
+    animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => resolveColorChangeChain());
   } else {
     proceedToAutoChange();
   }
@@ -948,13 +970,14 @@ function resolveAfterAutoChange() {
     if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
+    const iceCellsToConvert = collectIceCells(matches);
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
-    animateRemoval(cellsToRemove, clearedList, () => resolveAutoChangeChain());
+    animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => resolveAutoChangeChain());
   } else {
     finishResolve();
   }
@@ -968,13 +991,14 @@ function resolveAutoChangeChain() {
     if (combo >= 2) showPopup(`${combo} COMBO! x${combo}`, 'combo-popup');
 
     const cellsToRemove = collectCells(matches);
+    const iceCellsToConvert = collectIceCells(matches);
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
-    animateRemoval(cellsToRemove, clearedList, () => resolveAutoChangeChain());
+    animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => resolveAutoChangeChain());
   } else {
     finishResolve();
   }
@@ -1340,12 +1364,13 @@ function finishResolve() {
         combo = 1;
         if (combo > maxCombo) maxCombo = combo;
         const cellsToRemove = collectCells(matches);
+        const iceCellsToConvert = collectIceCells(matches);
         const clearedList = setToList(cellsToRemove);
         let missionDone = checkMissionComplete(clearedList);
         score += calcScore(cellsToRemove.size, combo, missionDone);
         if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
         checkLevelUp();
-        animateRemoval(cellsToRemove, clearedList, () => {
+        animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => {
           enterColorChangeMode();
         });
       } else {
@@ -1374,13 +1399,14 @@ function resolveAfterPlace() {
     if (darkMode) { clearTimeout(darkRevealTimer); darkRevealAll = true; darkRevealCells.clear(); }
 
     const cellsToRemove = collectCells(matches);
+    const iceCellsToConvert = collectIceCells(matches);
     const clearedList = setToList(cellsToRemove);
     let missionDone = checkMissionComplete(clearedList);
     score += calcScore(cellsToRemove.size, combo, missionDone);
     if (missionDone) { showPopup(`QUEST! +${lastMissionBonus}`, 'mission-popup'); generateMission(); missionTurnCounter = 0; }
     checkLevelUp();
 
-    animateRemoval(cellsToRemove, clearedList, () => {
+    animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, () => {
       enterColorChangeMode();
     });
   } else {
@@ -1394,7 +1420,7 @@ function setToList(set) {
   return [...set].map(k => { const [r, c] = k.split(',').map(Number); return { r, c }; });
 }
 
-function animateRemoval(cellsToRemove, clearedList, callback) {
+function animateRemoval(cellsToRemove, clearedList, iceCellsToConvert, callback) {
   renderAll();
   const boardEl = document.getElementById('board');
   for (const key of cellsToRemove) {
@@ -1406,7 +1432,7 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
 
   inputLocked = true;
   setTimeout(() => {
-    const cracked = crackAdjacentVoids(clearedList);
+    const cracked = crackAdjacentVoids(clearedList, iceCellsToConvert);
 
     // Track color collection before removing
     for (const key of cellsToRemove) {
@@ -1419,16 +1445,33 @@ function animateRemoval(cellsToRemove, clearedList, callback) {
       board[rr][cc] = null;
     }
 
+    // Adjacent ice cells (different color) shatter and disappear
+    for (const { r, c } of cracked) {
+      board[r][c] = null;
+    }
+
+    // In-group ice cells of same color convert to normal tiles
+    for (const key of iceCellsToConvert) {
+      const [rr, cc] = key.split(',').map(Number);
+      if (board[rr][cc] && board[rr][cc].isVoid) {
+        board[rr][cc] = { color: board[rr][cc].color, isVoid: false };
+      }
+    }
+
     if (isBoardEmpty()) {
       sessionBoardCleared = true;
       score += 100;
       showPopup('CLEAR! +100', 'mission-popup');
     }
 
-    if (cracked.length > 0) {
+    const convertedList = [...iceCellsToConvert]
+      .map(k => { const [r, c] = k.split(',').map(Number); return { r, c }; })
+      .filter(({ r, c }) => board[r][c] && !board[r][c].isVoid);
+
+    if (convertedList.length > 0) {
       renderAll();
       const boardEl2 = document.getElementById('board');
-      for (const { r, c } of cracked) {
+      for (const { r, c } of convertedList) {
         const idx = r * BOARD_SIZE + c;
         const tileEl = boardEl2.children[idx].querySelector('.tile');
         if (tileEl) tileEl.classList.add('color-swap');

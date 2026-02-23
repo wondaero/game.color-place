@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>Color Preview — 8색 확정안</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<style>
+  * { box-sizing: border-box; }
+  body {
+    background: #1a1a2e;
+    color: #fff;
+    font-family: 'Pretendard', sans-serif;
+    padding: 36px 28px;
+    margin: 0;
+  }
+  h1 { font-size: 1.3rem; letter-spacing: 2px; margin: 0 0 6px; }
+  .sub { color: #888; font-size: 0.82rem; margin-bottom: 36px; }
+
+  /* 8 balls row */
+  .balls-row {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    margin-bottom: 40px;
+  }
+  .color-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 7px;
+  }
+  .ball {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    box-shadow:
+      0 4px 14px rgba(0,0,0,0.55),
+      inset 0 -4px 7px rgba(0,0,0,0.3),
+      inset 4px 4px 8px rgba(255,255,255,0.22);
+  }
+  .ball-sm {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    box-shadow:
+      0 2px 8px rgba(0,0,0,0.45),
+      inset 0 -3px 5px rgba(0,0,0,0.3),
+      inset 3px 3px 5px rgba(255,255,255,0.2);
+  }
+  .cname { font-size: 0.75rem; font-weight: 700; color: #ddd; }
+  .chex  { font-size: 0.65rem; color: #666; font-family: monospace; }
+
+  /* pair check */
+  .section-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #aaa;
+    letter-spacing: 1px;
+    margin: 0 0 14px;
+    text-transform: uppercase;
+  }
+  .pair-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 10px;
+    margin-bottom: 40px;
+  }
+  .pair-card {
+    background: #22223a;
+    border-radius: 10px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .pair-balls { display: flex; gap: 6px; }
+  .pair-note  { font-size: 0.7rem; color: #aaa; line-height: 1.5; }
+  .ok { color: #6fcf97; font-weight: 700; }
+
+  /* board sample */
+  .board-wrap {
+    display: inline-grid;
+    grid-template-columns: repeat(5, 44px);
+    gap: 6px;
+    margin-bottom: 8px;
+  }
+  .cell-empty {
+    width: 44px; height: 44px;
+    border-radius: 50%;
+    background: #2a2a3e;
+    border: 2px solid #3a3a5a;
+  }
+  .boards { display: flex; gap: 32px; flex-wrap: wrap; }
+  .board-label { font-size: 0.72rem; color: #666; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<h1>8색 확정안</h1>
+<p class="sub">색상환 균등 배치 + 인접 색 명도 교차 → 구분 보장</p>
+
+<!-- 8 colors -->
+<div class="balls-row">
+  <div class="color-item">
+    <div class="ball" style="background:#D32F2F"></div>
+    <div class="cname">Red</div>
+    <div class="chex">#D32F2F</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#6D4C41"></div>
+    <div class="cname">Brown</div>
+    <div class="chex">#6D4C41</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#FDD835"></div>
+    <div class="cname">Yellow</div>
+    <div class="chex">#FDD835</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#388E3C"></div>
+    <div class="cname">Green</div>
+    <div class="chex">#388E3C</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#0097A7"></div>
+    <div class="cname">Cyan</div>
+    <div class="chex">#0097A7</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#1565C0"></div>
+    <div class="cname">Blue</div>
+    <div class="chex">#1565C0</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#6A1B9A"></div>
+    <div class="cname">Purple</div>
+    <div class="chex">#6A1B9A</div>
+  </div>
+  <div class="color-item">
+    <div class="ball" style="background:#7CB342"></div>
+    <div class="cname">Lime</div>
+    <div class="chex">#7CB342</div>
+  </div>
+</div>
+
+<!-- 인접 쌍 검증 -->
+<div class="section-title">인접 쌍 구분 확인</div>
+<div class="pair-grid">
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#D32F2F"></div>
+      <div class="ball-sm" style="background:#6D4C41"></div>
+    </div>
+    <div class="pair-note">
+      Red · Brown<br>
+      <span class="ok">명도 차이</span> (밝음↔어두움)
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#6D4C41"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+    </div>
+    <div class="pair-note">
+      Brown · Yellow<br>
+      <span class="ok">색·명도 둘 다</span> 완전히 다름
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#FDD835"></div>
+      <div class="ball-sm" style="background:#388E3C"></div>
+    </div>
+    <div class="pair-note">
+      Yellow · Green<br>
+      <span class="ok">색상 차이</span> 명확
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#388E3C"></div>
+      <div class="ball-sm" style="background:#0097A7"></div>
+    </div>
+    <div class="pair-note">
+      Green · Cyan<br>
+      <span class="ok">색상 차이</span> 명확
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#0097A7"></div>
+      <div class="ball-sm" style="background:#1565C0"></div>
+    </div>
+    <div class="pair-note">
+      Cyan · Blue<br>
+      <span class="ok">명도 차이</span> (밝음↔어두움)
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#1565C0"></div>
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+    </div>
+    <div class="pair-note">
+      Blue · Purple<br>
+      <span class="ok">색상 차이</span> 명확
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+      <div class="ball-sm" style="background:#7CB342"></div>
+    </div>
+    <div class="pair-note">
+      Purple · Lime<br>
+      <span class="ok">색상 차이</span> 완전히 다름
+    </div>
+  </div>
+
+  <div class="pair-card">
+    <div class="pair-balls">
+      <div class="ball-sm" style="background:#7CB342"></div>
+      <div class="ball-sm" style="background:#D32F2F"></div>
+    </div>
+    <div class="pair-note">
+      Lime · Red<br>
+      <span class="ok">색상 차이</span> 완전히 다름
+    </div>
+  </div>
+
+</div>
+
+<!-- board samples -->
+<div class="section-title">보드 위에서</div>
+<div class="boards">
+  <div>
+    <div class="board-wrap">
+      <div class="ball-sm" style="background:#D32F2F"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+      <div class="ball-sm" style="background:#0097A7"></div>
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+      <div class="ball-sm" style="background:#388E3C"></div>
+      <div class="ball-sm" style="background:#7CB342"></div>
+      <div class="ball-sm" style="background:#1565C0"></div>
+      <div class="ball-sm" style="background:#6D4C41"></div>
+      <div class="ball-sm" style="background:#D32F2F"></div>
+      <div class="ball-sm" style="background:#0097A7"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+      <div class="ball-sm" style="background:#388E3C"></div>
+      <div class="ball-sm" style="background:#7CB342"></div>
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+      <div class="ball-sm" style="background:#1565C0"></div>
+      <div class="ball-sm" style="background:#6D4C41"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+      <div class="ball-sm" style="background:#D32F2F"></div>
+      <div class="ball-sm" style="background:#388E3C"></div>
+      <div class="ball-sm" style="background:#0097A7"></div>
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+      <div class="ball-sm" style="background:#7CB342"></div>
+      <div class="ball-sm" style="background:#6D4C41"></div>
+      <div class="ball-sm" style="background:#1565C0"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+    </div>
+    <div class="board-label">가득 찬 상태</div>
+  </div>
+
+  <div>
+    <div class="board-wrap">
+      <div class="ball-sm" style="background:#D32F2F"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#0097A7"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#388E3C"></div>
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#1565C0"></div>
+      <div class="ball-sm" style="background:#7CB342"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#6D4C41"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#D32F2F"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#FDD835"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#1565C0"></div>
+      <div class="ball-sm" style="background:#388E3C"></div>
+      <div class="ball-sm" style="background:#6A1B9A"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#7CB342"></div>
+      <div class="cell-empty"></div>
+      <div class="ball-sm" style="background:#0097A7"></div>
+    </div>
+    <div class="board-label">빈 칸 섞인 상태</div>
+  </div>
+</div>
+
+</body>
+</html>
