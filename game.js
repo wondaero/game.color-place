@@ -542,7 +542,8 @@ function findMatches() {
           }
         }
       }
-      if (group.length >= 3) groups.push({ color, cells: group });
+      const minGroup = gameMode === 'free' ? 4 : 3;
+      if (group.length >= minGroup) groups.push({ color, cells: group });
     }
   }
   return groups;
@@ -712,7 +713,7 @@ function renderQueue() {
     if (t.skill) {
       const badge = document.createElement('div');
       badge.className = 'skill-badge';
-      badge.textContent = t.skill.replace('s','').replace('h','H');
+      badge.textContent = '';
       preview.appendChild(badge);
 
       const sk = SKILL_DEFS.find(s => s.id === t.skill);
@@ -758,6 +759,16 @@ function setStatus(text, color) {
     el.classList.remove('hidden');
     el.style.color = color || '';
   } else {
+    const cur = queue[0];
+    if (cur && cur.skill) {
+      const sk = SKILL_DEFS.find(s => s.id === cur.skill);
+      if (sk) {
+        el.textContent = `[${sk.name}] ${sk.desc}`;
+        el.classList.remove('hidden');
+        el.style.color = '';
+        return;
+      }
+    }
     el.classList.add('hidden');
     el.style.color = '';
   }
@@ -1449,6 +1460,7 @@ function finishResolve() {
   if (darkMode) darkRevealAll = false; // 모든 체인 끝 → 다시 어둠
   maybeNewMission();
   renderAll();
+  setStatus(null);
   checkGameOver();
 }
 
